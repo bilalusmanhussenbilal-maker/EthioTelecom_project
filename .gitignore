@@ -1,0 +1,31 @@
+# dependencies
+node_modules/
+
+# builds
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# environment
+.env
+.env.local
+.env.*.local
+
+# logs
+*.log
+npm-debug.log*
+logs/
+
+# tooling caches
+.turbo/
+.vercel/
+.eslintcache
+coverage/
+
+# editors & OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

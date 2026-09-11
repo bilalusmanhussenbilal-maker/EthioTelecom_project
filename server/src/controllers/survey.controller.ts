@@ -1,6 +1,7 @@
 import type { RequestHandler } from "express";
 import { z } from "zod";
 import { getAuthContext } from "../middleware/auth.js";
+import { getStatusCounts } from "../services/technician.service.js";
 import {
   assignSurvey,
   createSurveyForActor,
@@ -12,6 +13,7 @@ import {
   saveFieldData,
   submitSurvey,
 } from "../services/survey.service.js";
+import { ApiError } from "../utils/api-error.js";
 import { parseBody, parseParams, parseQuery } from "../utils/validation.js";
 
 const idParams = z.object({ id: z.string().min(1) });
@@ -105,6 +107,21 @@ export const listSurveysHandler: RequestHandler = async (req, res) => {
   );
 
   res.status(200).json(result);
+};
+
+/**
+ * Status counts for the queue header. Technicians get their own totals, supervisors and
+ * administrators get the whole organisation.
+ */
+export const getSurveySummaryHandler: RequestHandler = async (req, res) => {
+  const actor = getAuthContext(req);
+  const technicianId = actor.role === "TECHNICIAN" ? actor.technicianId : undefined;
+
+  if (actor.role === "TECHNICIAN" && !technicianId) {
+    throw ApiError.forbidden("This account is not linked to a technician profile");
+  }
+
+  res.status(200).json({ counts: await getStatusCounts(technicianId) });
 };
 
 export const getSurveyHandler: RequestHandler = async (req, res) => {

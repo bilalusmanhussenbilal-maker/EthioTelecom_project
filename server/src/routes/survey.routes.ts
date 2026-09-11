@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   getSurveyFormDataHandler,
   getSurveyHandler,
+  getSurveySummaryHandler,
   getSurveyTimelineHandler,
   listSurveysHandler,
   patchSurveyFieldDataHandler,
@@ -19,6 +20,7 @@ surveyRouter.use(requireAuth);
 surveyRouter.get("/", listSurveysHandler);
 surveyRouter.post("/", requireRole("SUPERVISOR", "ADMIN"), postSurveyHandler);
 
+surveyRouter.get("/summary", getSurveySummaryHandler);
 surveyRouter.get("/:id", getSurveyHandler);
 surveyRouter.get("/:id/form-data", getSurveyFormDataHandler);
 surveyRouter.get("/:id/timeline", getSurveyTimelineHandler);

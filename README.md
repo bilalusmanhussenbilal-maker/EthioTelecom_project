@@ -19,26 +19,29 @@ The repository is an npm-workspaces monorepo: one install, one lockfile, two app
 
 ```
 internship-project/
-â”œâ”€â”€ client/                 # Next.js frontend
-â”‚   â”œâ”€â”€ app/                # App Router routes, layout, globals.css (design tokens)
-â”‚   â”œâ”€â”€ components/         # theme provider + shared UI primitives
-â”‚   â”œâ”€â”€ lib/                # utils and the typed API client
-â”‚   â””â”€â”€ package.json
-â”œâ”€â”€ server/                 # Express backend
-â”‚   â”œâ”€â”€ src/
-â”‚   â”‚   â”œâ”€â”€ config/         # validated environment configuration
-â”‚   â”‚   â”œâ”€â”€ controllers/    # request/response translation
-â”‚   â”‚   â”œâ”€â”€ services/       # business logic
-â”‚   â”‚   â”œâ”€â”€ routes/         # route definitions
-â”‚   â”‚   â”œâ”€â”€ models/         # data layer
-â”‚   â”‚   â”œâ”€â”€ middleware/     # logging, error handling
-â”‚   â”‚   â”œâ”€â”€ utils/          # logger, ApiError
-â”‚   â”‚   â”œâ”€â”€ app.ts          # express app wiring
-â”‚   â”‚   â””â”€â”€ server.ts       # http entrypoint
-â”‚   â””â”€â”€ package.json
-â”œâ”€â”€ package.json            # workspaces + root scripts
-â”œâ”€â”€ .env.example
-â””â”€â”€ AGENTS.md
+├── client/                 # Next.js frontend
+│   ├── app/                # App Router routes, layout, globals.css (design tokens)
+│   │   ├── (app)/          # signed-in area: dashboard, surveys, search, technicians, reports, admin
+│   │   └── login/          # sign-in route
+│   ├── components/         # theme provider, shared UI primitives, feature components
+│   ├── lib/                # utils, domain labels, hooks, auth context, typed API modules
+│   └── package.json
+├── server/                 # Express backend
+│   ├── prisma/             # schema, migrations and seed
+│   ├── src/
+│   │   ├── config/         # validated environment configuration
+│   │   ├── controllers/    # request/response translation
+│   │   ├── services/       # business logic
+│   │   ├── routes/         # route definitions
+│   │   ├── models/         # data layer
+│   │   ├── middleware/     # logging, error handling
+│   │   ├── utils/          # logger, ApiError
+│   │   ├── app.ts          # express app wiring
+│   │   └── server.ts       # http entrypoint
+│   └── package.json
+├── package.json            # workspaces + root scripts
+├── .env.example
+└── AGENTS.md
 ```
 
 ## Prerequisites
@@ -236,14 +239,49 @@ Useful connection-string parameters for a hosted pooler, already applied to `DAT
 Seed data follows AGENTS.md deliberately: `BOX-22` has ports 01, 02 and 04 occupied with 03 and 05
 available; `LINE-05` runs `MSAN-03 -> BOX-15 -> BOX-18 -> BOX-22` with 18 of 48 capacity free;
 `SRV-002` is the not-feasible case, because `BOX-30` has no free port and `LINE-09` is full.
-## Frontend notes
+## Frontend
 
+### Routes
+
+| Route | Who | Purpose |
+| --- | --- | --- |
+| `/` | public | Landing page and sign-in entry point. |
+| `/login` | public | Credential sign-in, with one-click demo accounts. |
+| `/dashboard` | all roles | Role-specific dashboard. |
+| `/search` | all roles | #16 search across services, boxes, ports and lines. |
+| `/surveys` | all roles | Technician "My surveys" queue, or the supervisor/admin survey queue. |
+| `/surveys/[id]` | all roles | Survey detail: old network, new network, field survey, feasibility, timeline. |
+| `/surveys/[id]/survey` | technician | The #9 survey form, GPS capture and submission. |
+| `/technicians` | supervisor, admin | Technician workload and availability. |
+| `/reports` | supervisor, admin | #17 reports with charts, tables and CSV export. |
+| `/admin/users` | admin | Account creation, roles and password resets. |
+
+### How it is put together
+
+- The session is an httpOnly cookie on the API origin, so the signed-in area is client rendered and
+  `client/app/(app)/layout.tsx` gates it on `useAuth()`. Server Components are still used for the
+  public shell and the landing page.
+- `client/lib/api/` holds one module per backend resource on top of the shared `client.ts` fetch
+  wrapper; UI components never call `fetch` directly.
+- `client/lib/hooks/use-async.ts` covers the loading / ready / error states every API-backed view
+  needs, including the 401 wording so an expired session does not look like a broken connection.
+- `client/components/app/` holds the cross-feature pieces (shell, alerts, async boundary, page
+  header, stat cards, status badges) and `client/components/<feature>/` holds the feature views.
+- `client/lib/domain.ts` is the single source of truth for every enum label and colour tone, so
+  status wording stays consistent across dashboards, tables and forms.
 - `client/app/globals.css` holds the design tokens and the `@theme inline` mapping that exposes
   them as Tailwind utilities. Dark mode is class based (`.dark` on `<html>`) and is applied before
   first paint by an inline script in the root layout.
-- Shared primitives live in `client/components/ui` and stay presentational.
-- UI code never calls `fetch` directly; it goes through `client/lib/api/client.ts`.
+- Layout is mobile first, because technicians use phones in the field.
 
+### Survey form behaviour
+
+The form loads `GET /surveys/:id/form-data` plus `GET /network/options`, so service, old network
+and new network are already filled in. The technician only sets the field observations, the target
+box/port/line and the remark. The feasibility badge re-checks on save, and the boxes and ports the
+API offers are already filtered to assignable ones. **GPS is required to submit** - the submit
+button is blocked until a fix is captured, and the API rejects a submission without one. A fix
+worse than `GPS_MAX_ACCURACY_METERS` is warned about in the form and rejected by the API.
 ## Status
 
 **Task 1 - scaffold and design system: complete.** Workspaces, design tokens, dark mode, shared UI
@@ -256,6 +294,16 @@ survey creation and assignment, auto-populated form data, the #9 field survey wi
 submission, supervisor approve/reject/return, the #17 reports with CSV export, #20 activity logging,
 and admin user management.
 
+**Task 3 - frontend: complete.** Every AGENTS.md role now has a working interface on top of the
+Task 2 API: the technician dashboard and survey queue, the #16 search, the survey detail with the
+old network / new network / field survey / feasibility panels, the #9 auto-populated survey form
+with the GPS-gated submit, the supervisor review queue with approve / reject / return, the #17
+reports, and the admin user management screen. Verified end to end in a headless browser against
+the live API: sign-in for all three roles, a `BOX-22` search returning the `LINE-05` route, GPS
+capture via `Emulation.setGeolocationOverride`, a real submission, a real supervisor approval, and
+every list, report and form rendering its data. `npm run typecheck`, `npm run lint` and
+`npm run build` all pass.
+
 Two deliberate deviations from AGENTS.md, both confirmed with the project owner:
 
 - **Offline operation (#18/#19) is out of scope.** Surveys are submitted online, though the form
@@ -267,4 +315,6 @@ Known limitation worth fixing before production: logout clears the cookie but do
 JWT server side, so a copied token stays valid until it expires (12h). A token version column on
 `users`, or a short TTL with a refresh token, would close that.
 
-Next: the technician, supervisor and administrator interfaces.
+Next: nothing in the AGENTS.md scope is outstanding. The offline sync APIs (#18/#19) stay out of
+scope by decision, and the JWT invalidation gap above is the first thing to fix before this goes
+anywhere near production.

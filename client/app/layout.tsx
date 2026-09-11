@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
+import { AuthProvider } from "@/lib/auth/auth-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
@@ -32,7 +33,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body className="min-h-dvh bg-background font-sans text-foreground antialiased">
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

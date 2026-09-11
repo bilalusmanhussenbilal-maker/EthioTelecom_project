@@ -1,6 +1,8 @@
-import { Boxes, ClipboardList, ShieldCheck, Wifi } from "lucide-react";
+import Link from "next/link";
+import { Boxes, ClipboardList, LogIn, ShieldCheck, Wifi } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -42,12 +44,13 @@ const ROLES = [
 ] as const;
 
 const FOUNDATION = [
-  { label: "Monorepo workspaces for client and server", state: "Ready" },
+  { label: "Monorepo workspaces for the Next.js client and Express server", state: "Ready" },
   { label: "Design tokens with light and dark themes", state: "Ready" },
-  { label: "Shared UI primitives", state: "Ready" },
-  { label: "Typed API client for the Express backend", state: "Ready" },
-  { label: "Express server with health endpoint", state: "Ready" },
-  { label: "Domain models, roles and survey screens", state: "Next" },
+  { label: "Shared UI primitives and a typed API client", state: "Ready" },
+  { label: "Schema, authentication and role-based authorization", state: "Ready" },
+  { label: "Technical feasibility engine and service search", state: "Ready" },
+  { label: "Survey form with GPS-verified submission", state: "Ready" },
+  { label: "Supervisor review, reports and admin management", state: "Ready" },
 ] as const;
 
 export default function Home() {
@@ -70,7 +73,13 @@ export default function Home() {
             approval.
           </p>
         </div>
-        <ThemeToggle />
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <Link href="/login" className={buttonVariants({ size: "sm" })}>
+            <LogIn aria-hidden className="size-4" />
+            Sign in
+          </Link>
+        </div>
       </header>
 
       <Card>
@@ -117,8 +126,8 @@ export default function Home() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Foundation status</CardTitle>
-          <CardDescription>What the scaffold task delivered.</CardDescription>
+          <CardTitle>Build status</CardTitle>
+          <CardDescription>Client and backend, from scaffold to working workflow.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
           {FOUNDATION.map(({ label, state }) => (

@@ -1,3 +1,4 @@
+import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
 import type { Express } from "express";
@@ -18,6 +19,7 @@ export function createApp(): Express {
       credentials: true,
     }),
   );
+  app.use(cookieParser());
   app.use(express.json({ limit: "1mb" }));
   app.use(requestLogger);
 

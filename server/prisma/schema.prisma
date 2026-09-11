@@ -1,0 +1,366 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  TECHNICIAN
+  SUPERVISOR
+  ADMIN
+}
+
+enum ServiceType {
+  NEW_CONNECTION
+  LINE_SHIFT
+  SERVICE_SURVEY
+  NETWORK_VERIFICATION
+}
+
+enum ServiceStatus {
+  ACTIVE
+  SUSPENDED
+  TERMINATED
+}
+
+enum ChangeType {
+  NEW_CONNECTION
+  LINE_SHIFT
+  VERIFICATION
+}
+
+enum BoxType {
+  MSAN
+  FDC
+  FDT
+  PILLAR
+  JOINT
+}
+
+enum BoxStatus {
+  ACTIVE
+  FAULTY
+  INACTIVE
+}
+
+enum PortStatus {
+  AVAILABLE
+  OCCUPIED
+  FAULTY
+}
+
+enum LineType {
+  FIBER
+  COPPER
+  MICROWAVE
+}
+
+enum LineStatus {
+  ACTIVE
+  FAULTY
+  INACTIVE
+}
+
+enum SurveyStatus {
+  NEW
+  IN_PROGRESS
+  COMPLETED
+  RETURNED
+  REJECTED
+}
+
+enum FeasibilityStatus {
+  TECHNICALLY_FEASIBLE
+  NOT_FEASIBLE
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  fullName     String
+  passwordHash String
+  role         UserRole
+  phoneNumber  String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  technician        Technician?
+  reviewedSurveys   Survey[]           @relation("SurveyReviewer")
+  createdSurveys    Survey[]           @relation("SurveyCreator")
+  assignmentsMade   SurveyAssignment[] @relation("AssignmentSupervisor")
+  activityLogs      ActivityLog[]
+
+  @@map("users")
+}
+
+model Technician {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  employeeCode String   @unique
+  zone         String?
+  isAvailable  Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  surveys     Survey[]
+  assignments SurveyAssignment[]
+
+  @@map("technicians")
+}
+
+model Area {
+  id       String  @id @default(cuid())
+  code     String  @unique
+  name     String
+  zone     String?
+  parentId String?
+
+  parent   Area?    @relation("AreaHierarchy", fields: [parentId], references: [id])
+  children Area[]   @relation("AreaHierarchy")
+  services Service[]
+  boxes    Box[]
+  lines    Line[]
+
+  @@index([parentId])
+  @@map("areas")
+}
+
+model Service {
+  id             String        @id @default(cuid())
+  serviceCode    String        @unique
+  customerName   String
+  serviceType    ServiceType
+  serviceAddress String
+  street         String?
+  houseNumber    String?
+  areaId         String
+  latitude       Float?
+  longitude      Float?
+  status         ServiceStatus @default(ACTIVE)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  area       Area        @relation(fields: [areaId], references: [id])
+  oldNetwork OldNetwork?
+  newNetwork NewNetwork?
+  surveys    Survey[]
+
+  @@index([areaId])
+  @@index([customerName])
+  @@map("services")
+}
+
+model Box {
+  id         String    @id @default(cuid())
+  code       String    @unique
+  name       String?
+  type       BoxType
+  status     BoxStatus @default(ACTIVE)
+  areaId     String?
+  latitude   Float?
+  longitude  Float?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  area           Area?        @relation(fields: [areaId], references: [id])
+  ports          Port[]
+  lineHops       LineHop[]
+  oldNetworkRefs OldNetwork[] @relation("OldBox")
+  newNetworkRefs NewNetwork[] @relation("NewBox")
+
+  @@index([areaId])
+  @@map("boxes")
+}
+
+model Port {
+  id        String     @id @default(cuid())
+  code      String
+  boxId     String
+  status    PortStatus @default(AVAILABLE)
+  notes     String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  box            Box          @relation(fields: [boxId], references: [id], onDelete: Cascade)
+  oldNetworkRefs OldNetwork[] @relation("OldPort")
+  newNetworkRefs NewNetwork[] @relation("NewPort")
+
+  @@unique([boxId, code])
+  @@index([boxId, status])
+  @@map("ports")
+}
+
+model Line {
+  id           String     @id @default(cuid())
+  code         String     @unique
+  name         String?
+  type         LineType
+  status       LineStatus @default(ACTIVE)
+  capacity     Int
+  usedCapacity Int        @default(0)
+  sourceCode   String
+  targetCode   String
+  cableInfo    String?
+  areaId       String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  area           Area?        @relation(fields: [areaId], references: [id])
+  hops           LineHop[]
+  oldNetworkRefs OldNetwork[] @relation("OldLine")
+  newNetworkRefs NewNetwork[] @relation("NewLine")
+
+  @@index([areaId])
+  @@map("lines")
+}
+
+model LineHop {
+  id       String  @id @default(cuid())
+  lineId   String
+  sequence Int
+  nodeCode String
+  boxId    String?
+
+  line Line  @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  box  Box?  @relation(fields: [boxId], references: [id])
+
+  @@unique([lineId, sequence])
+  @@index([nodeCode])
+  @@map("line_hops")
+}
+
+model OldNetwork {
+  id        String   @id @default(cuid())
+  serviceId String   @unique
+  boxId     String?
+  portId    String?
+  lineId    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  box     Box?    @relation("OldBox", fields: [boxId], references: [id])
+  port    Port?   @relation("OldPort", fields: [portId], references: [id])
+  line    Line?   @relation("OldLine", fields: [lineId], references: [id])
+
+  @@map("old_network")
+}
+
+model NewNetwork {
+  id               String     @id @default(cuid())
+  serviceId        String     @unique
+  boxId            String?
+  portId           String?
+  lineId           String?
+  requiredCapacity Int        @default(0)
+  changeType       ChangeType @default(NEW_CONNECTION)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  box     Box?    @relation("NewBox", fields: [boxId], references: [id])
+  port    Port?   @relation("NewPort", fields: [portId], references: [id])
+  line    Line?   @relation("NewLine", fields: [lineId], references: [id])
+
+  @@map("new_network")
+}
+
+model Survey {
+  id         String       @id @default(cuid())
+  surveyCode String       @unique
+  serviceId  String
+  status     SurveyStatus @default(NEW)
+
+  technicianId String?
+  createdById  String?
+
+  boxStatus         BoxStatus?
+  portStatus        PortStatus?
+  lineStatus        LineStatus?
+  availableCapacity Int?
+  requiredCapacity  Int?
+  feasibilityStatus  FeasibilityStatus?
+  feasibilityReasons Json?
+  technicianRemark   String?
+
+  submittedAt DateTime?
+  completedAt DateTime?
+
+  reviewedById String?
+  reviewRemark String?
+  reviewedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  service     Service            @relation(fields: [serviceId], references: [id])
+  technician  Technician?        @relation(fields: [technicianId], references: [id])
+  createdBy   User?              @relation("SurveyCreator", fields: [createdById], references: [id])
+  reviewedBy  User?              @relation("SurveyReviewer", fields: [reviewedById], references: [id])
+  gpsRecord   GpsRecord?
+  assignments SurveyAssignment[]
+  activityLogs ActivityLog[]
+
+  @@index([serviceId])
+  @@index([technicianId, status])
+  @@index([status])
+  @@map("surveys")
+}
+
+model SurveyAssignment {
+  id           String    @id @default(cuid())
+  surveyId     String
+  technicianId String
+  assignedById String?
+  assignedAt   DateTime  @default(now())
+  dueDate      DateTime?
+  isActive     Boolean   @default(true)
+  note         String?
+
+  survey     Survey     @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  technician Technician @relation(fields: [technicianId], references: [id])
+  assignedBy User?      @relation("AssignmentSupervisor", fields: [assignedById], references: [id])
+
+  @@index([technicianId, isActive])
+  @@index([surveyId])
+  @@map("survey_assignments")
+}
+
+model GpsRecord {
+  id                        String   @id @default(cuid())
+  surveyId                  String   @unique
+  latitude                  Float
+  longitude                 Float
+  accuracy                  Float
+  capturedAt                DateTime
+  distanceFromServiceMeters Float?
+  isWithinServiceArea       Boolean?
+  createdAt                 DateTime @default(now())
+
+  survey Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+
+  @@map("gps_records")
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  surveyId  String?
+  action    String
+  message   String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  user   User?   @relation(fields: [userId], references: [id])
+  survey Survey? @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+
+  @@index([surveyId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("activity_logs")
+}

@@ -1,10 +1,13 @@
 import type {
   BoxStatus,
+  BoxType,
   ChangeType,
   FeasibilityStatus,
   LineStatus,
+  LineType,
   PortStatus,
   ReviewState,
+  ServiceStatus,
   ServiceType,
   SurveyStatus,
   UserRole,
@@ -132,3 +135,44 @@ export const FEASIBILITY_REASON_LABELS: Record<string, string> = {
 export function labelOf<T extends string>(map: Record<T, string>, value: T | null | undefined): string {
   return value === null || value === undefined ? "-" : (map[value] ?? value);
 }
+export const BOX_TYPE_LABELS: Record<BoxType, string> = {
+  MSAN: "MSAN",
+  FDC: "FDC",
+  FDT: "FDT",
+  PILLAR: "Pillar",
+  JOINT: "Joint",
+};
+
+export const LINE_TYPE_LABELS: Record<LineType, string> = {
+  FIBER: "Fiber",
+  COPPER: "Copper",
+  MICROWAVE: "Microwave",
+};
+
+export const SERVICE_STATUS_LABELS: Record<ServiceStatus, string> = {
+  ACTIVE: "Active",
+  SUSPENDED: "Suspended",
+  TERMINATED: "Terminated",
+};
+
+export const SERVICE_STATUS_TONES: Record<ServiceStatus, Tone> = {
+  ACTIVE: "success",
+  SUSPENDED: "warning",
+  TERMINATED: "neutral",
+};
+
+/* Option lists for the administrator management forms. Kept next to the labels
+   so a new enum member only has to be added in one place. */
+export const BOX_TYPE_VALUES: BoxType[] = ["MSAN", "FDC", "FDT", "PILLAR", "JOINT"];
+export const BOX_STATUS_VALUES: BoxStatus[] = ["ACTIVE", "FAULTY", "INACTIVE"];
+export const PORT_STATUS_VALUES: PortStatus[] = ["AVAILABLE", "OCCUPIED", "FAULTY"];
+export const LINE_TYPE_VALUES: LineType[] = ["FIBER", "COPPER", "MICROWAVE"];
+export const LINE_STATUS_VALUES: LineStatus[] = ["ACTIVE", "FAULTY", "INACTIVE"];
+export const SERVICE_TYPE_VALUES: ServiceType[] = [
+  "NEW_CONNECTION",
+  "LINE_SHIFT",
+  "SERVICE_SURVEY",
+  "NETWORK_VERIFICATION",
+];
+export const SERVICE_STATUS_VALUES: ServiceStatus[] = ["ACTIVE", "SUSPENDED", "TERMINATED"];
+export const CHANGE_TYPE_VALUES: ChangeType[] = ["NEW_CONNECTION", "LINE_SHIFT", "VERIFICATION"];

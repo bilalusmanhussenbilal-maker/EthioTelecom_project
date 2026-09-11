@@ -139,6 +139,9 @@ export interface NetworkNode {
     availableCapacity?: number;
     path?: string[];
   } | null;
+  /** Only the new-network link carries these; Prisma include returns the row scalars. */
+  requiredCapacity?: number;
+  changeType?: ChangeType;
 }
 
 export interface ServiceRecord {
@@ -440,4 +443,111 @@ export interface ManagedUser {
   updatedAt: string;
   technician: { id: string; employeeCode: string; zone: string | null; isAvailable: boolean } | null;
   _count?: { activityLogs: number };
+}
+
+/* ---------------------------------------------------------------------------
+ * Administrator network management payloads (#2/#20). Every field except the
+ * identifiers is optional on the patch variants, because PATCH only sends what
+ * the administrator actually changed.
+ * ------------------------------------------------------------------------ */
+
+export interface NetworkLinkPayload {
+  boxId?: string | null;
+  portId?: string | null;
+  lineId?: string | null;
+}
+
+export interface NewNetworkPayload extends NetworkLinkPayload {
+  requiredCapacity: number;
+  changeType?: ChangeType;
+}
+
+export interface AreaPayload {
+  code: string;
+  name: string;
+  zone?: string | null;
+  parentId?: string | null;
+}
+
+export interface BoxPayload {
+  code: string;
+  name?: string | null;
+  type: BoxType;
+  status?: BoxStatus;
+  areaId?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+export interface PortPayload {
+  code: string;
+  status?: PortStatus;
+  notes?: string | null;
+}
+
+export interface LineHopPayload {
+  nodeCode: string;
+  boxId?: string | null;
+}
+
+export interface LinePayload {
+  code: string;
+  name?: string | null;
+  type: LineType;
+  status?: LineStatus;
+  capacity: number;
+  usedCapacity?: number;
+  sourceCode: string;
+  targetCode: string;
+  cableInfo?: string | null;
+  areaId?: string | null;
+  hops?: LineHopPayload[];
+}
+
+export interface ServicePayload {
+  serviceCode: string;
+  customerName: string;
+  serviceType: ServiceType;
+  serviceAddress: string;
+  street?: string | null;
+  houseNumber?: string | null;
+  areaId: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  status?: ServiceStatus;
+  oldNetwork?: NetworkLinkPayload | null;
+  newNetwork?: NewNetworkPayload | null;
+}
+
+export type AreaPatch = Partial<AreaPayload>;
+export type BoxPatch = Partial<BoxPayload>;
+export type PortPatch = Partial<PortPayload>;
+export type LinePatch = Partial<LinePayload>;
+export type ServicePatch = Partial<ServicePayload>;
+
+/** Shapes returned by the delete endpoints. */
+export interface DeletedArea {
+  id: string;
+  code: string;
+}
+
+export interface DeletedBox {
+  id: string;
+  code: string;
+}
+
+export interface DeletedPort {
+  id: string;
+  code: string;
+  boxId: string;
+}
+
+export interface DeletedLine {
+  id: string;
+  code: string;
+}
+
+export interface DeletedService {
+  id: string;
+  serviceCode: string;
 }

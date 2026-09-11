@@ -64,28 +64,27 @@ export async function createUserForAdmin(input: CreateUserRequest, actor: AdminA
 
   const passwordHash = await hashPassword(input.password);
 
-  const user = await prisma.$transaction(async (tx) => {
-    const created = await tx.user.create({
-      data: {
-        username: input.username,
-        fullName: input.fullName,
-        passwordHash,
-        role: input.role,
-        phoneNumber: input.phoneNumber ?? null,
-      },
-    });
-
-    if (input.role === "TECHNICIAN") {
-      await tx.technician.create({
-        data: {
-          userId: created.id,
-          employeeCode: input.employeeCode as string,
-          zone: input.zone ?? null,
-        },
-      });
-    }
-
-    return tx.user.findUniqueOrThrow({ where: { id: created.id }, select: userAdminSelect });
+  // One nested write rather than an interactive transaction: the hosted pooler
+  // is slow enough that Prisma's 5s transaction default timed out on this path.
+  const user = await prisma.user.create({
+    data: {
+      username: input.username,
+      fullName: input.fullName,
+      passwordHash,
+      role: input.role,
+      phoneNumber: input.phoneNumber ?? null,
+      ...(input.role === "TECHNICIAN"
+        ? {
+            technician: {
+              create: {
+                employeeCode: input.employeeCode as string,
+                zone: input.zone ?? null,
+              },
+            },
+          }
+        : {}),
+    },
+    select: userAdminSelect,
   });
 
   await recordActivity({

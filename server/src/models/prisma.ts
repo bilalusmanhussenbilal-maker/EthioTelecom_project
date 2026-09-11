@@ -12,3 +12,10 @@ export const prisma =
 if (!isProduction) {
   globalForPrisma.prismaClient = prisma;
 }
+
+/**
+ * Interactive transactions default to a 5s timeout and a 2s wait. The hosted
+ * pooler is slow enough that a multi-step write can exceed that, so the few
+ * places that genuinely need atomicity opt into these more generous values.
+ */
+export const TRANSACTION_OPTIONS = { maxWait: 15_000, timeout: 45_000 };

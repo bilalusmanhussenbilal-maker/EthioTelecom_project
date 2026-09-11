@@ -25,8 +25,7 @@ const boxFilterQuery = z.object({
   areaId: z.string().min(1).optional(),
   status: z.enum(["ACTIVE", "FAULTY", "INACTIVE"]).optional(),
 });
-const portFilterQuery = z.object({
-  boxId: z.string().min(1),
+const portStatusQuery = z.object({
   status: z.enum(["AVAILABLE", "OCCUPIED", "FAULTY"]).optional(),
 });
 const serviceFilterQuery = z.object({
@@ -59,8 +58,9 @@ export const getBoxByCodeHandler: RequestHandler = async (req, res) => {
 };
 
 export const getBoxPortsHandler: RequestHandler = async (req, res) => {
-  const query = parseQuery(portFilterQuery, req);
-  res.status(200).json({ ports: await getPorts(query.boxId, query.status) });
+  const { id } = parseParams(idParams, req);
+  const query = parseQuery(portStatusQuery, req);
+  res.status(200).json({ ports: await getPorts(id, query.status) });
 };
 
 export const getAvailablePortsHandler: RequestHandler = async (req, res) => {

@@ -120,6 +120,37 @@ a hidden button is never treated as a security boundary.
 | `GET` | `/network/services/:id` | any role | One service with old network, new network and survey history |
 | `GET` | `/network/services/code/:code` | any role | Lookup by service ID |
 
+### Network administration (administrator only)
+
+Administrators manage the master data the survey workflow reads (AGENTS.md #2 and #20). Every
+mutation is role-gated in the middleware and again in the service, and every change writes an
+activity-log entry.
+
+| Method | Endpoint | Access | Purpose |
+| --- | --- | --- | --- |
+| `POST` | `/network/areas` | admin | Create a service area |
+| `PATCH` | `/network/areas/:id` | admin | Rename or re-parent an area |
+| `DELETE` | `/network/areas/:id` | admin | Delete an area nothing references |
+| `POST` | `/network/boxes` | admin | Create a box |
+| `PATCH` | `/network/boxes/:id` | admin | Edit a box |
+| `DELETE` | `/network/boxes/:id` | admin | Delete a box that has no ports and no network references |
+| `POST` | `/network/boxes/:id/ports` | admin | Add a port to a box |
+| `PATCH` | `/network/ports/:id` | admin | Change a port status or note |
+| `DELETE` | `/network/ports/:id` | admin | Delete a port no service uses |
+| `POST` | `/network/lines` | admin | Create a line and its route hops |
+| `PATCH` | `/network/lines/:id` | admin | Edit a line, replacing the route when `hops` is sent |
+| `DELETE` | `/network/lines/:id` | admin | Delete a line no service uses |
+| `POST` | `/network/services` | admin | Create a service with its old and new network |
+| `PATCH` | `/network/services/:id` | admin | Edit a service; sending `null` clears a network link |
+| `DELETE` | `/network/services/:id` | admin | Delete a service that has no surveys |
+
+Guards refuse to delete data a survey or service still depends on and return `409`
+(`AREA_IN_USE`, `BOX_IN_USE`, `PORT_IN_USE`, `LINE_IN_USE`, `SERVICE_IN_USE`); bad input returns
+`422` (`UNKNOWN_AREA`, `UNKNOWN_BOX`, `UNKNOWN_PORT`, `UNKNOWN_LINE`, `PORT_BOX_MISMATCH`,
+`CAPACITY_EXCEEDED`, `AREA_CYCLE`) and duplicate codes return `409`. A route hop whose `nodeCode`
+matches a box code is linked to that box automatically, so `MSAN-03 -> BOX-15 -> BOX-18 -> BOX-22`
+is stored as a real hop-by-hop route.
+
 ### Search
 
 | Method | Endpoint | Access | Purpose |
@@ -255,6 +286,7 @@ available; `LINE-05` runs `MSAN-03 -> BOX-15 -> BOX-18 -> BOX-22` with 18 of 48 
 | `/technicians` | supervisor, admin | Technician workload and availability. |
 | `/reports` | supervisor, admin | #17 reports with charts, tables and CSV export. |
 | `/admin/users` | admin | Account creation, roles and password resets. |
+| `/admin/network` | admin | #2 administrator master data: service areas, boxes with inline port management, lines with an ordered route editor, and services with old/new network pickers. |
 
 ### How it is put together
 
@@ -303,6 +335,25 @@ the live API: sign-in for all three roles, a `BOX-22` search returning the `LINE
 capture via `Emulation.setGeolocationOverride`, a real submission, a real supervisor approval, and
 every list, report and form rendering its data. `npm run typecheck`, `npm run lint` and
 `npm run build` all pass.
+
+**Task 4 - administrator network management: complete.** `/admin/network` adds the #2/#20
+management screens on top of new administrator-only endpoints: four tabs for service areas, boxes
+and their ports, lines with an ordered route editor, and services with old/new network pickers. The whole
+`Service -> Old Network -> Change/Shift -> New Network` record can now be created and corrected
+from the UI. Verified against the live API with a 46-check backend suite plus a 26-check
+headless-browser suite exercising create, edit, blocked delete and delete for all four resources,
+with `npm run typecheck`, `npm run lint` and `npm run build` all passing.
+
+Two backend defects surfaced and were fixed while building this screen:
+
+- **Prisma interactive transactions timed out against the Neon pooler.** The pooler exceeds Prisma's
+  5-second interactive-transaction default, so multi-step `$transaction` calls failed with
+  *Transaction already closed*. This had silently broken administrator user creation since Task 2 and
+  also blocked service create/update. They now use single nested writes, with explicit
+  `maxWait`/`timeout` on the one transaction that still needs delete-versus-upsert branching.
+- **`GET /network/boxes/:id/ports` ignored its path parameter** and demanded a `boxId` query
+  string, so it always failed validation with `422`. It now reads the box id from the path and
+  accepts only the optional `status` filter.
 
 Two deliberate deviations from AGENTS.md, both confirmed with the project owner:
 

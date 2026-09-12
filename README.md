@@ -304,6 +304,10 @@ available; `LINE-05` runs `MSAN-03 -> BOX-15 -> BOX-18 -> BOX-22` with 18 of 48 
   wrapper; UI components never call `fetch` directly.
 - `client/lib/hooks/use-async.ts` covers the loading / ready / error states every API-backed view
   needs, including the 401 wording so an expired session does not look like a broken connection.
+- A 401 is a session problem rather than a failed request, so it is handled once instead of per
+  view: `client/lib/api/session.ts` announces it, the auth provider ends the session, and the
+  signed-in layout returns the user to `/login` with a short explanation instead of leaving a
+  retry button that can never succeed.
 - `client/components/app/` holds the cross-feature pieces (shell, alerts, async boundary, page
   header, stat cards, status badges) and `client/components/<feature>/` holds the feature views.
 - `client/lib/domain.ts` is the single source of truth for every enum label and colour tone, so
@@ -379,6 +383,15 @@ Verified against the live API with an 18-check suite that replays a revoked cook
 
 One trade-off worth knowing: revocation is per account, not per device, so signing out on one phone
 ends that account's other sessions too. That is the cost of a version column over a session table.
+
+**Task 6 - session-expiry handling in the UI: complete.** Revocation only helps if the interface
+reacts to it. A 401 now ends the session in the client instead of rendering a "Try again" card that
+can never succeed: the API client announces the rejection, the auth provider clears the session, the
+signed-in layout returns the user to `/login`, and the form explains that the session ended (a
+sign-out on another device, or a password reset). Someone who was never signed in still sees the
+plain form, and signing in clears the notice. Verified in a headless browser by revoking a live
+technician session from outside the browser and then navigating within the app (11/11 checks), with
+the 26-check admin UI suite still green.
 
 Next: nothing in the AGENTS.md scope is outstanding. The offline sync APIs (#18/#19) stay out of
 scope by decision, so the remaining work is hardening rather than features - a per-device session

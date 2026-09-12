@@ -1,3 +1,5 @@
+import { notifySessionRejected } from "./session";
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1";
 
 export interface ApiErrorPayload {
@@ -108,6 +110,12 @@ export async function apiRequest<TResponse>(
   const data = text ? parseJson(text) : undefined;
 
   if (!response.ok) {
+    // A 401 is a session problem rather than a problem with this request, so let the auth
+    // provider end the session instead of leaving the view to retry a call that cannot succeed.
+    if (response.status === 401) {
+      notifySessionRejected();
+    }
+
     throw new ApiError(response.status, normalizeErrorPayload(data, response.status));
   }
 

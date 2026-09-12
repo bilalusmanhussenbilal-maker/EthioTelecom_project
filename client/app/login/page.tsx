@@ -22,7 +22,7 @@ const DEMO_ACCOUNTS = [
 
 export default function LoginPage() {
   const router = useRouter();
-  const { status, signIn } = useAuth();
+  const { status, signIn, sessionExpired } = useAuth();
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -80,6 +80,15 @@ export default function LoginPage() {
           <CardDescription>Use the account your administrator created for you.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {sessionExpired ? (
+            <Alert tone="warning" title="Your session ended">
+              <p>
+                Sign in again to continue. This happens when you sign out on another device, or when
+                an administrator resets your password.
+              </p>
+            </Alert>
+          ) : null}
+
           <form className="space-y-4" onSubmit={handleSubmit} noValidate>
             <div className="space-y-1.5">
               <Label htmlFor="username">Username</Label>

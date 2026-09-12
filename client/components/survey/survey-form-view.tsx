@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { ArrowLeft, Crosshair, Loader2, MapPin, Save, Send, TriangleAlert } from "lucide-react";
 import { Alert } from "@/components/app/alert";
@@ -21,9 +21,12 @@ import { ApiError } from "@/lib/api/client";
 import { toApiError, issueFor } from "@/lib/api/errors";
 import { networkApi } from "@/lib/api/network";
 import { surveysApi } from "@/lib/api/surveys";
+import { useAuth } from "@/lib/auth/auth-provider";
 import { FEASIBILITY_REASON_LABELS, SERVICE_TYPE_LABELS } from "@/lib/domain";
 import { formatCoordinate, formatMeters } from "@/lib/format";
 import { useAsync } from "@/lib/hooks/use-async";
+import { clearSurveyDraft, loadSurveyDraft, saveSurveyDraft } from "@/lib/survey-draft";
+import type { SurveyDraftInput } from "@/lib/survey-draft";
 import type {
   BoxStatus,
   LineStatus,
@@ -92,17 +95,55 @@ interface SurveyFormProps {
 
 function SurveyForm({ id, initial, options, onSaved }: SurveyFormProps) {
   const router = useRouter();
+  const { user } = useAuth();
 
-  const [boxStatus, setBoxStatus] = useState<BoxStatus | "">(initial.fieldSurvey.boxStatus ?? "");
-  const [portStatus, setPortStatus] = useState<PortStatus | "">(initial.fieldSurvey.portStatus ?? "");
-  const [lineStatus, setLineStatus] = useState<LineStatus | "">(initial.fieldSurvey.lineStatus ?? "");
-  const [remark, setRemark] = useState(initial.fieldSurvey.technicianRemark ?? "");
+  /**
+   * Scope the draft to the signed-in technician. Field devices are sometimes shared, and nobody
+   * should find another technician's unsaved edits waiting in their form.
+   */
+  const draftOwner = user?.id ?? "";
 
-  const [boxId, setBoxId] = useState(initial.newNetwork?.box?.id ?? "");
-  const [portId, setPortId] = useState(initial.newNetwork?.port?.id ?? "");
-  const [lineId, setLineId] = useState(initial.newNetwork?.line?.id ?? "");
+  const locked = initial.survey.status === "COMPLETED" || initial.survey.status === "REJECTED";
+
+  /**
+   * Put back anything the technician typed before. This component only mounts on the client, once
+   * the survey data has loaded, so reading stored state while rendering is safe: there is no
+   * server-rendered markup for it to disagree with.
+   */
+  const [draft] = useState<SurveyDraftInput | null>(() => (locked ? null : loadSurveyDraft(draftOwner, id)));
+
+  // Only restore references the form can still offer; the network may have changed since.
+  const restoredBoxId =
+    draft && options.boxes.some((box) => box.id === draft.boxId)
+      ? draft.boxId
+      : initial.newNetwork?.box?.id ?? "";
+  const restoredBox = options.boxes.find((box) => box.id === restoredBoxId) ?? null;
+  const restoredPortId =
+    draft && restoredBox?.ports.some((port) => port.id === draft.portId)
+      ? draft.portId
+      : initial.newNetwork?.port?.id ?? "";
+  const restoredLineId =
+    draft && options.lines.some((line) => line.id === draft.lineId)
+      ? draft.lineId
+      : initial.newNetwork?.line?.id ?? "";
+
+  const [boxStatus, setBoxStatus] = useState<BoxStatus | "">(
+    draft?.boxStatus ?? initial.fieldSurvey.boxStatus ?? "",
+  );
+  const [portStatus, setPortStatus] = useState<PortStatus | "">(
+    draft?.portStatus ?? initial.fieldSurvey.portStatus ?? "",
+  );
+  const [lineStatus, setLineStatus] = useState<LineStatus | "">(
+    draft?.lineStatus ?? initial.fieldSurvey.lineStatus ?? "",
+  );
+  const [remark, setRemark] = useState(draft?.remark ?? initial.fieldSurvey.technicianRemark ?? "");
+
+  const [boxId, setBoxId] = useState(restoredBoxId);
+  const [portId, setPortId] = useState(restoredPortId);
+  const [lineId, setLineId] = useState(restoredLineId);
   const [requiredCapacity, setRequiredCapacity] = useState(
-    String(initial.requiredCapacity ?? initial.fieldSurvey.requiredCapacity ?? 0),
+    draft?.requiredCapacity ??
+      String(initial.requiredCapacity ?? initial.fieldSurvey.requiredCapacity ?? 0),
   );
 
   const [location, setLocation] = useState<CapturedLocation | null>(
@@ -122,6 +163,9 @@ function SurveyForm({ id, initial, options, onSaved }: SurveyFormProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [draftRestored, setDraftRestored] = useState(draft !== null);
+  /** Work the debounce below has not written yet, so leaving the form never drops the last edit. */
+  const pendingDraft = useRef<SurveyDraftInput | null>(null);
 
   const selectedBox = options.boxes.find((box) => box.id === boxId) ?? null;
   const assignablePorts = selectedBox?.ports.filter((port) => port.status === "AVAILABLE") ?? [];
@@ -130,7 +174,90 @@ function SurveyForm({ id, initial, options, onSaved }: SurveyFormProps) {
     : [];
 
   const feasibility = initial.feasibility;
-  const locked = initial.survey.status === "COMPLETED" || initial.survey.status === "REJECTED";
+
+  const serverSnapshot = useMemo(
+    () =>
+      JSON.stringify({
+        boxStatus: initial.fieldSurvey.boxStatus ?? "",
+        portStatus: initial.fieldSurvey.portStatus ?? "",
+        lineStatus: initial.fieldSurvey.lineStatus ?? "",
+        remark: initial.fieldSurvey.technicianRemark ?? "",
+        boxId: initial.newNetwork?.box?.id ?? "",
+        portId: initial.newNetwork?.port?.id ?? "",
+        lineId: initial.newNetwork?.line?.id ?? "",
+        requiredCapacity: String(initial.requiredCapacity ?? initial.fieldSurvey.requiredCapacity ?? 0),
+      }),
+    [initial],
+  );
+
+  /** Keep the draft in step with the form, and drop it once the form matches the saved values. */
+  useEffect(() => {
+    if (locked || id === "" || draftOwner === "") {
+      return;
+    }
+
+    const current: SurveyDraftInput = {
+      boxStatus,
+      portStatus,
+      lineStatus,
+      remark,
+      boxId,
+      portId,
+      lineId,
+      requiredCapacity,
+    };
+
+    const matchesSaved = JSON.stringify(current) === serverSnapshot;
+    pendingDraft.current = matchesSaved ? null : current;
+
+    const timer = window.setTimeout(() => {
+      if (matchesSaved) {
+        clearSurveyDraft(draftOwner, id);
+      } else {
+        saveSurveyDraft(draftOwner, id, current);
+      }
+
+      pendingDraft.current = null;
+    }, 500);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    locked,
+    id,
+    draftOwner,
+    serverSnapshot,
+    boxStatus,
+    portStatus,
+    lineStatus,
+    remark,
+    boxId,
+    portId,
+    lineId,
+    requiredCapacity,
+  ]);
+
+  // Flush whatever the debounce has not written when the technician leaves the form.
+  useEffect(
+    () => () => {
+      if (pendingDraft.current) {
+        saveSurveyDraft(draftOwner, id, pendingDraft.current);
+      }
+    },
+    [draftOwner, id],
+  );
+
+  function discardDraft() {
+    clearSurveyDraft(draftOwner, id);
+    setBoxStatus(initial.fieldSurvey.boxStatus ?? "");
+    setPortStatus(initial.fieldSurvey.portStatus ?? "");
+    setLineStatus(initial.fieldSurvey.lineStatus ?? "");
+    setRemark(initial.fieldSurvey.technicianRemark ?? "");
+    setBoxId(initial.newNetwork?.box?.id ?? "");
+    setPortId(initial.newNetwork?.port?.id ?? "");
+    setLineId(initial.newNetwork?.line?.id ?? "");
+    setRequiredCapacity(String(initial.requiredCapacity ?? initial.fieldSurvey.requiredCapacity ?? 0));
+    setDraftRestored(false);
+  }
 
   function captureLocation() {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -179,6 +306,8 @@ function SurveyForm({ id, initial, options, onSaved }: SurveyFormProps) {
 
     try {
       await surveysApi.saveFieldData(id, fieldPayload());
+      clearSurveyDraft(draftOwner, id);
+      setDraftRestored(false);
       setNotice("Saved. Feasibility has been re-checked against the latest values.");
       onSaved();
     } catch (cause) {
@@ -207,6 +336,7 @@ function SurveyForm({ id, initial, options, onSaved }: SurveyFormProps) {
 
     try {
       await surveysApi.submit(id, { ...fieldPayload(), gps: location });
+      clearSurveyDraft(draftOwner, id);
       router.push(`/surveys/${id}`);
     } catch (cause) {
       setError(toApiError(cause, "Could not submit the survey"));
@@ -233,6 +363,19 @@ function SurveyForm({ id, initial, options, onSaved }: SurveyFormProps) {
               View the result
             </Link>
             .
+          </p>
+        </Alert>
+      ) : null}
+
+      {draftRestored ? (
+        <Alert tone="info" title="Your unsaved changes were restored">
+          <p>
+            This form was left with unsaved changes, so they have been put back.{" "}
+            <button type="button" className="underline" onClick={discardDraft}>
+              Discard them
+            </button>{" "}
+            to start again from the saved values. The GPS fix is not kept, so capture a fresh one
+            before submitting.
           </p>
         </Alert>
       ) : null}

@@ -23,7 +23,10 @@ export function AsyncBoundary<T>({
   loadingLabel = "Loading",
   errorTitle,
 }: AsyncBoundaryProps<T>) {
-  if (state.isLoading) {
+  // Only the very first load takes over the page. A background refresh - for example after the
+  // survey form saves - keeps the current view mounted, so feedback the view is showing is not
+  // wiped out by a flash of the loading state.
+  if (state.isLoading && state.data === null) {
     return <LoadingState label={loadingLabel} />;
   }
 

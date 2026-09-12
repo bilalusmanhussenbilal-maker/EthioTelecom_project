@@ -325,6 +325,16 @@ box/port/line and the remark. The feasibility badge re-checks on save, and the b
 API offers are already filtered to assignable ones. **GPS is required to submit** - the submit
 button is blocked until a fix is captured, and the API rejects a submission without one. A fix
 worse than `GPS_MAX_ACCURACY_METERS` is warned about in the form and rejected by the API.
+
+The form also keeps a local draft in `localStorage`, keyed `survey-draft:<technician id>:<survey id>`.
+A debounced write (500 ms) follows every keystroke, the last pending edit is flushed when the form
+unmounts, and the draft is cleared as soon as the form matches the saved values or the survey is saved
+or submitted. Returning to a form that has one restores the box, port, line, capacity, field conditions
+and remark, says so at the top, and offers **Discard them** to start again from the saved values. The
+key is scoped to the signed-in technician, and GPS is never stored - a position captured minutes ago
+must not be resubmitted as a fresh measurement. This is not offline support (#18/#19): nothing is
+queued, retried or synced, and no server data is cached.
+
 ## Status
 
 **Task 1 - scaffold and design system: complete.** Workspaces, design tokens, dark mode, shared UI
@@ -368,8 +378,9 @@ Two backend defects surfaced and were fixed while building this screen:
 
 Two deliberate deviations from AGENTS.md, both confirmed with the project owner:
 
-- **Offline operation (#18/#19) is out of scope.** Surveys are submitted online, though the form
-  still preserves in-progress input and GPS is captured at submit time.
+- **Offline operation (#18/#19) is out of scope.** Surveys are submitted online. The form keeps a
+  local draft of what the technician typed so a reload, a navigation or an expired session does not
+  discard it, but there is no queue, retry or conflict handling.
 - **Surveys are raised by a supervisor or administrator, not by the technician.** Technicians work
   the queue that is assigned to them.
 
@@ -392,6 +403,22 @@ sign-out on another device, or a password reset). Someone who was never signed i
 plain form, and signing in clears the notice. Verified in a headless browser by revoking a live
 technician session from outside the browser and then navigating within the app (11/11 checks), with
 the 26-check admin UI suite still green.
+
+**Task 7 - survey draft persistence: complete.** A survey in progress now survives a reload, a
+navigation away and an expired session. `client/lib/survey-draft.ts` is a small versioned
+`localStorage` store keyed by technician and survey; the survey form restores the box, port, line,
+capacity, field conditions and remark from it, writes changes on a 500 ms debounce, flushes the last
+edit when the form unmounts, and clears the draft once the form matches the saved values or the
+survey is saved or submitted. A restored draft is announced with a **Discard them** action, GPS is
+never stored, and the key is technician-scoped so a shared field device never shows one technician's
+edits to another. Verified in a headless browser with a 37-check suite covering restore after
+navigation and reload, the unmount flush, discard, per-technician isolation, and clearing on save;
+the 11-check session suite and the 26-check admin UI suite still pass.
+
+A related defect surfaced while testing: `AsyncBoundary` treated a background refresh as a first
+load, so **Save progress** unmounted the form and its "Saved." confirmation was never visible,
+throwing away the GPS fix the technician had just captured. The boundary now keeps the current view
+mounted while data is refreshed and only takes over the page for the very first load.
 
 Next: nothing in the AGENTS.md scope is outstanding. The offline sync APIs (#18/#19) stay out of
 scope by decision, so the remaining work is hardening rather than features - a per-device session

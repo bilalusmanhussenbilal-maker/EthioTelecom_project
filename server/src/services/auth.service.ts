@@ -1,5 +1,5 @@
 import type { Technician, User } from "@prisma/client";
-import { findUserById, findUserByUsername } from "../models/user.model.js";
+import { findUserById, findUserByUsername, revokeUserSessions } from "../models/user.model.js";
 import type { UserRole } from "../models/roles.js";
 import { ApiError } from "../utils/api-error.js";
 import { signAuthToken } from "../utils/jwt.js";
@@ -52,6 +52,7 @@ export async function login(username: string, password: string): Promise<LoginRe
     userId: user.id,
     username: user.username,
     role: user.role,
+    tokenVersion: user.tokenVersion,
     ...(user.technician ? { technicianId: user.technician.id } : {}),
   });
 
@@ -62,6 +63,20 @@ export async function login(username: string, password: string): Promise<LoginRe
   });
 
   return { token, user: toAuthenticatedUser(user) };
+}
+
+/**
+ * Revokes every session issued for this account. Clearing the cookie alone leaves a copied
+ * token usable until it expires, so logout also moves the account to the next generation.
+ */
+export async function logout(userId: string): Promise<void> {
+  const user = await revokeUserSessions(userId);
+
+  await recordActivity({
+    action: "USER_SIGNED_OUT",
+    message: `${user.username} signed out`,
+    userId: user.id,
+  });
 }
 
 export async function getCurrentUser(userId: string): Promise<AuthenticatedUser> {

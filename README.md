@@ -99,8 +99,15 @@ a hidden button is never treated as a security boundary.
 | --- | --- | --- | --- |
 | `GET` | `/health` | public | Liveness probe |
 | `POST` | `/auth/login` | public | Sign in, sets the session cookie |
-| `POST` | `/auth/logout` | public | Clear the session cookie |
+| `POST` | `/auth/logout` | public | Clear the session cookie and revoke the token |
 | `GET` | `/auth/me` | any role | Current user together with the technician profile |
+
+Sessions are revocable. Each account carries a `tokenVersion` that is embedded in its JWT as the
+`ver` claim and compared against the database on every authenticated request, so logging out or
+resetting a password invalidates every token that account already holds instead of leaving a copied
+token usable until it expires. Revocation is per account rather than per device: signing out on one
+phone also ends that account's other sessions. A request without a usable token still gets its cookie
+cleared, and a database problem during revocation is logged rather than failing the logout.
 
 ### Reference data
 
@@ -362,10 +369,17 @@ Two deliberate deviations from AGENTS.md, both confirmed with the project owner:
 - **Surveys are raised by a supervisor or administrator, not by the technician.** Technicians work
   the queue that is assigned to them.
 
-Known limitation worth fixing before production: logout clears the cookie but does not invalidate the
-JWT server side, so a copied token stays valid until it expires (12h). A token version column on
-`users`, or a short TTL with a refresh token, would close that.
+**Task 5 - session revocation: complete.** `User.tokenVersion` (migration
+`20260912103707_add_user_token_version`) travels in the JWT as the `ver` claim and is compared on
+every authenticated request, closing the gap Task 1-4 left open. Logout and password reset bump the
+column, so a copied token stops working immediately instead of surviving until it expires; both
+actions are also written to the activity log as `USER_SIGNED_OUT` and `USER_PASSWORD_RESET`.
+Verified against the live API with an 18-check suite that replays a revoked cookie and expects
+`401`, and the existing 46-check and 9-check backend suites still pass.
+
+One trade-off worth knowing: revocation is per account, not per device, so signing out on one phone
+ends that account's other sessions too. That is the cost of a version column over a session table.
 
 Next: nothing in the AGENTS.md scope is outstanding. The offline sync APIs (#18/#19) stay out of
-scope by decision, and the JWT invalidation gap above is the first thing to fix before this goes
-anywhere near production.
+scope by decision, so the remaining work is hardening rather than features - a per-device session
+table if "log out everywhere" proves too blunt for technicians who carry more than one device.

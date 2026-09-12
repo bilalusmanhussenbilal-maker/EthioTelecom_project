@@ -7,7 +7,7 @@ import { ApiError } from "../utils/api-error.js";
 import { verifyAuthToken } from "../utils/jwt.js";
 import type { AuthTokenPayload } from "../utils/jwt.js";
 
-function readAuthCookie(req: Request): string | null {
+export function readAuthCookie(req: Request): string | null {
   const cookies = req.cookies as Record<string, unknown> | undefined;
   const token = cookies?.[env.COOKIE_NAME];
 
@@ -34,6 +34,10 @@ export const requireAuth: RequestHandler = async (req, _res, next) => {
       throw ApiError.unauthorized("This account is no longer active");
     }
 
+    if (user.tokenVersion !== payload.tokenVersion) {
+      throw ApiError.unauthorized("Your session has ended. Please sign in again.");
+    }
+
     if (!isUserRole(user.role)) {
       throw ApiError.forbidden("This account has an unusable role");
     }
@@ -42,6 +46,7 @@ export const requireAuth: RequestHandler = async (req, _res, next) => {
       userId: user.id,
       username: user.username,
       role: user.role,
+      tokenVersion: user.tokenVersion,
       ...(user.technician ? { technicianId: user.technician.id } : {}),
     };
 

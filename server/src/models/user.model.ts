@@ -113,10 +113,20 @@ export function setUserActive(id: string, isActive: boolean) {
   });
 }
 
+/** Changing the password ends every session that was opened with the old one. */
 export function updateUserPassword(id: string, passwordHash: string) {
   return prisma.user.update({
     where: { id },
-    data: { passwordHash },
+    data: { passwordHash, tokenVersion: { increment: 1 } },
+    select: { id: true, username: true },
+  });
+}
+
+/** Moves the account to the next session generation, invalidating the tokens issued so far. */
+export function revokeUserSessions(id: string) {
+  return prisma.user.update({
+    where: { id },
+    data: { tokenVersion: { increment: 1 } },
     select: { id: true, username: true },
   });
 }

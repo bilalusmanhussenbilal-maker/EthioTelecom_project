@@ -251,6 +251,7 @@ export interface SurveyDetail {
   surveyCode: string;
   serviceId: string;
   status: SurveyStatus;
+  version: number;
   technicianId: string | null;
   createdById: string | null;
   boxStatus: BoxStatus | null;
@@ -297,6 +298,7 @@ export interface SurveyFormData {
     id: string;
     surveyCode: string;
     status: SurveyStatus;
+    version: number;
     reviewState: ReviewState;
     technicianRemark: string | null;
     submittedAt: string | null;
@@ -550,4 +552,13 @@ export interface DeletedLine {
 export interface DeletedService {
   id: string;
   serviceCode: string;
+}
+
+export interface SyncPullResponse {
+  syncedAt: string;
+  technicianId: string;
+  surveyIds: string[];
+  surveys: SurveyDetail[];
+  forms: SurveyFormData[];
+  networkOptions: { areas: AreaDetail[]; boxes: BoxOption[]; lines: LineDetail[] };
 }

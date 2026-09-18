@@ -1,5 +1,5 @@
 import type { BoxStatus, ChangeType, PortStatus, Prisma } from "@prisma/client";
-import { prisma, TRANSACTION_OPTIONS } from "./prisma.js";
+import { inTransaction, prisma } from "./prisma.js";
 
 export const areaSummarySelect = {
   id: true,
@@ -400,7 +400,9 @@ export function updateServiceFull(input: {
   oldNetwork: NetworkLinkInput | null | undefined;
   newNetwork: NewNetworkInput | null | undefined;
 }) {
-  return prisma.$transaction(async (tx) => {
+  return inTransaction(async () => {
+    const tx = prisma;
+    await tx.survey.updateMany({ where: { serviceId: input.id }, data: { version: { increment: 1 } } });
     await tx.service.update({ where: { id: input.id }, data: input.service });
 
     if (input.oldNetwork === null) {
@@ -424,7 +426,7 @@ export function updateServiceFull(input: {
     }
 
     return tx.service.findUniqueOrThrow({ where: { id: input.id }, include: serviceAdminInclude });
-  }, TRANSACTION_OPTIONS);
+  });
 }
 
 export function deleteService(id: string) {

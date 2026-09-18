@@ -22,7 +22,7 @@ import {
   type SurveyListFilter,
 } from "../models/survey.model.js";
 import { findTechnicianById } from "../models/technician.model.js";
-import { prisma } from "../models/prisma.js";
+import { inTransaction, prisma } from "../models/prisma.js";
 import { ApiError } from "../utils/api-error.js";
 import { distanceInMeters, roundMeters } from "../utils/geo.js";
 import type { UserRole } from "../models/roles.js";
@@ -99,7 +99,7 @@ function scopeToActor(actor: SurveyActor, filter: SurveyListFilter): SurveyListF
   return { ...filter, technicianId: actor.technicianId };
 }
 
-function assertCanRead(
+export function assertCanRead(
   actor: SurveyActor,
   survey: { technicianId: string | null },
 ): void {
@@ -142,15 +142,9 @@ export async function listSurveysForActor(
   return paginate(items, pagination.page, pagination.pageSize, total);
 }
 
-export async function getSurveyDetail(id: string, actor: SurveyActor) {
-  const survey = await findSurveyById(id);
+export type SurveyDetailRecord = NonNullable<Awaited<ReturnType<typeof findSurveyById>>>;
 
-  if (!survey) {
-    throw ApiError.notFound("That survey does not exist");
-  }
-
-  assertCanRead(actor, survey);
-
+export async function buildSurveyDetail(survey: SurveyDetailRecord) {
   const feasibility = await computeFeasibility(
     survey.service.newNetwork
       ? {
@@ -167,6 +161,18 @@ export async function getSurveyDetail(id: string, actor: SurveyActor) {
     reviewState: reviewStateOf(survey),
     feasibility,
   };
+}
+
+export async function getSurveyDetail(id: string, actor: SurveyActor) {
+  const survey = await findSurveyById(id);
+
+  if (!survey) {
+    throw ApiError.notFound("That survey does not exist");
+  }
+
+  assertCanRead(actor, survey);
+
+  return buildSurveyDetail(survey);
 }
 type NewNetworkRecord = {
   boxId: string | null;
@@ -276,6 +282,10 @@ export async function getSurveyFormData(id: string, actor: SurveyActor) {
 
   assertCanRead(actor, survey);
 
+  return buildSurveyFormData(survey);
+}
+
+export async function buildSurveyFormData(survey: SurveyDetailRecord) {
   const newNetworkRef = newNetworkRefFromDetail(survey.service.newNetwork);
   const [feasibility, availablePorts, candidateLines] = await Promise.all([
     computeFeasibility(newNetworkRef),
@@ -305,6 +315,7 @@ export async function getSurveyFormData(id: string, actor: SurveyActor) {
   return {
     survey: {
       id: survey.id,
+      version: survey.version,
       surveyCode: survey.surveyCode,
       status: survey.status,
       reviewState: reviewStateOf(survey),
@@ -387,6 +398,36 @@ async function applyNewNetwork(
     ...(input.changeType === undefined ? {} : { changeType: input.changeType }),
   };
 
+  const existing = await prisma.newNetwork.findUnique({ where: { serviceId } });
+  const target = {
+    boxId: existing?.boxId ?? null,
+    portId: existing?.portId ?? null,
+    lineId: existing?.lineId ?? null,
+    requiredCapacity: existing?.requiredCapacity ?? 0,
+    changeType: existing?.changeType ?? "NEW_CONNECTION",
+    ...data,
+  };
+  const [box, port, line] = await Promise.all([
+    target.boxId ? findBoxById(target.boxId) : null,
+    target.portId ? prisma.port.findUnique({ where: { id: target.portId } }) : null,
+    target.lineId ? findLineById(target.lineId) : null,
+  ]);
+  if ((target.boxId && !box) || (target.portId && !port) || (target.lineId && !line)) {
+    throw ApiError.unprocessable("The selected network record does not exist", { code: "INVALID_NETWORK_TARGET" });
+  }
+  if (port && port.boxId !== target.boxId) {
+    throw ApiError.unprocessable("The selected port does not belong to the selected box", { code: "PORT_BOX_MISMATCH" });
+  }
+  if (port && port.id !== existing?.portId && port.status !== "AVAILABLE") {
+    throw ApiError.unprocessable("The selected port is not available", { code: "PORT_UNAVAILABLE" });
+  }
+  if (box && line && !line.hops.some((hop) => hop.boxId === box.id || hop.nodeCode === box.code)) {
+    throw ApiError.unprocessable("The selected line does not reach the selected box", { code: "LINE_BOX_MISMATCH" });
+  }
+  if (existing && Object.entries(target).every(([key, value]) => existing[key as keyof typeof target] === value)) {
+    return;
+  }
+  await prisma.survey.updateMany({ where: { serviceId }, data: { version: { increment: 1 } } });
   await prisma.newNetwork.upsert({
     where: { serviceId },
     create: {
@@ -405,7 +446,11 @@ async function applyNewNetwork(
  * Surveys are raised by a supervisor or admin, never by the technician - the technician
  * receives work. An optional technicianId assigns the survey in the same call.
  */
-export async function createSurveyForActor(input: CreateSurveyInput, actor: SurveyActor) {
+export function createSurveyForActor(input: CreateSurveyInput, actor: SurveyActor) {
+  return inTransaction(() => createSurveyInTransaction(input, actor));
+}
+
+async function createSurveyInTransaction(input: CreateSurveyInput, actor: SurveyActor) {
   if (!isPrivileged(actor)) {
     throw ApiError.forbidden("Only a supervisor or administrator can create a survey");
   }
@@ -490,7 +535,11 @@ export interface AssignSurveyInput {
   note?: string | null;
 }
 
-export async function assignSurvey(id: string, input: AssignSurveyInput, actor: SurveyActor) {
+export function assignSurvey(id: string, input: AssignSurveyInput, actor: SurveyActor) {
+  return inTransaction(() => assignSurveyInTransaction(id, input, actor));
+}
+
+async function assignSurveyInTransaction(id: string, input: AssignSurveyInput, actor: SurveyActor) {
   if (!isPrivileged(actor)) {
     throw ApiError.forbidden("Only a supervisor or administrator can assign surveys");
   }
@@ -543,7 +592,11 @@ export interface FieldDataInput {
   technicianRemark?: string | null;
 }
 
-export async function saveFieldData(id: string, input: FieldDataInput, actor: SurveyActor) {
+export function saveFieldData(id: string, input: FieldDataInput, actor: SurveyActor) {
+  return inTransaction(() => saveFieldDataInTransaction(id, input, actor));
+}
+
+async function saveFieldDataInTransaction(id: string, input: FieldDataInput, actor: SurveyActor) {
   const survey = await findSurveyById(id);
 
   if (!survey) {
@@ -564,6 +617,12 @@ export async function saveFieldData(id: string, input: FieldDataInput, actor: Su
     ...(survey.status === "NEW" || survey.status === "RETURNED" ? { status: "IN_PROGRESS" } : {}),
   };
 
+  await recordActivity({
+    action: "SURVEY_SAVED",
+    message: `Survey ${survey.surveyCode} saved by ${actor.username}`,
+    userId: actor.userId,
+    surveyId: id,
+  });
   const updated = await updateSurvey(id, data);
 
   const feasibility = await computeFeasibility(
@@ -613,7 +672,11 @@ export interface SubmitSurveyInput {
  * technical feasibility from #10 is computed with the authoritative backend engine, and the
  * technician's own observations are frozen onto the record.
  */
-export async function submitSurvey(id: string, input: SubmitSurveyInput, actor: SurveyActor) {
+export function submitSurvey(id: string, input: SubmitSurveyInput, actor: SurveyActor) {
+  return inTransaction(() => submitSurveyInTransaction(id, input, actor));
+}
+
+async function submitSurveyInTransaction(id: string, input: SubmitSurveyInput, actor: SurveyActor) {
   const survey = await findSurveyById(id);
 
   if (!survey) {
@@ -763,7 +826,11 @@ export interface ReviewInput {
   remark?: string | null;
 }
 
-export async function reviewSurvey(id: string, input: ReviewInput, actor: SurveyActor) {
+export function reviewSurvey(id: string, input: ReviewInput, actor: SurveyActor) {
+  return inTransaction(() => reviewSurveyInTransaction(id, input, actor));
+}
+
+async function reviewSurveyInTransaction(id: string, input: ReviewInput, actor: SurveyActor) {
   if (!isPrivileged(actor)) {
     throw ApiError.forbidden("Only a supervisor or administrator can review a survey");
   }

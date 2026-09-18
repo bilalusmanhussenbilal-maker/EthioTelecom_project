@@ -14,14 +14,12 @@ import {
   submitSurvey,
 } from "../services/survey.service.js";
 import { ApiError } from "../utils/api-error.js";
+import { fieldDataSchema, submitSchema } from "../utils/survey-validation.js";
 import { parseBody, parseParams, parseQuery } from "../utils/validation.js";
 
 const idParams = z.object({ id: z.string().min(1) });
 
 const surveyStatusSchema = z.enum(["NEW", "IN_PROGRESS", "COMPLETED", "RETURNED", "REJECTED"]);
-const boxStatusSchema = z.enum(["ACTIVE", "FAULTY", "INACTIVE"]);
-const portStatusSchema = z.enum(["AVAILABLE", "OCCUPIED", "FAULTY"]);
-const lineStatusSchema = z.enum(["ACTIVE", "FAULTY", "INACTIVE"]);
 const changeTypeSchema = z.enum(["NEW_CONNECTION", "LINE_SHIFT", "VERIFICATION"]);
 
 const listQuerySchema = z.object({
@@ -51,37 +49,6 @@ const assignSurveySchema = z.object({
   technicianId: z.string().min(1),
   dueDate: z.coerce.date().nullable().optional(),
   note: z.string().trim().max(500).nullable().optional(),
-});
-
-const networkTargetSchema = {
-  newBoxId: z.string().min(1).nullable().optional(),
-  newPortId: z.string().min(1).nullable().optional(),
-  newLineId: z.string().min(1).nullable().optional(),
-  requiredCapacity: z.coerce.number().int().min(0).max(10_000).nullable().optional(),
-};
-
-const fieldDataSchema = z.object({
-  ...networkTargetSchema,
-  boxStatus: boxStatusSchema.nullable().optional(),
-  portStatus: portStatusSchema.nullable().optional(),
-  lineStatus: lineStatusSchema.nullable().optional(),
-  availableCapacity: z.coerce.number().int().min(0).max(100_000).nullable().optional(),
-  technicianRemark: z.string().trim().max(2000).nullable().optional(),
-});
-
-const submitSchema = z.object({
-  ...networkTargetSchema,
-  boxStatus: boxStatusSchema.nullable().optional(),
-  portStatus: portStatusSchema.nullable().optional(),
-  lineStatus: lineStatusSchema.nullable().optional(),
-  availableCapacity: z.coerce.number().int().min(0).max(100_000).nullable().optional(),
-  technicianRemark: z.string().trim().max(2000).nullable().optional(),
-  gps: z.object({
-    latitude: z.number().min(-90).max(90),
-    longitude: z.number().min(-180).max(180),
-    accuracy: z.number().positive().max(100_000),
-    capturedAt: z.coerce.date().optional(),
-  }),
 });
 
 const reviewSchema = z.object({

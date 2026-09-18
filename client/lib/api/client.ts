@@ -1,4 +1,5 @@
 import { notifySessionRejected } from "./session";
+import { syncApi } from "./sync";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1";
 
@@ -131,4 +132,5 @@ export const api = {
     apiRequest<TResponse>(path, { ...options, method: "PATCH", body }),
   delete: <TResponse>(path: string, options?: Omit<RequestOptions, "method" | "body">) =>
     apiRequest<TResponse>(path, { ...options, method: "DELETE" }),
+  sync: syncApi,
 };

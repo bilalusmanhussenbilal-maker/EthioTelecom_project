@@ -278,6 +278,7 @@ model Survey {
   surveyCode String       @unique
   serviceId  String
   status     SurveyStatus @default(NEW)
+  version    Int          @default(1)
 
   technicianId String?
   createdById  String?
@@ -348,6 +349,19 @@ model GpsRecord {
   survey Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
 
   @@map("gps_records")
+}
+
+model SyncReceipt {
+  userId      String
+  mutationId  String   @db.Uuid
+  surveyId    String
+  payloadHash String
+  response    Json
+  createdAt   DateTime @default(now())
+
+  @@id([userId, mutationId])
+  @@index([surveyId])
+  @@map("sync_receipts")
 }
 
 model ActivityLog {

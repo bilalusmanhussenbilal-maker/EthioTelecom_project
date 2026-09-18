@@ -92,6 +92,14 @@ export function findSurveyById(id: string) {
   return prisma.survey.findUnique({ where: { id }, include: surveyDetailInclude });
 }
 
+export function listAssignedSurveyDetails(technicianId: string) {
+  return prisma.survey.findMany({
+    where: { technicianId },
+    orderBy: { updatedAt: "desc" },
+    include: surveyDetailInclude,
+  });
+}
+
 export function findSurveyByCode(surveyCode: string) {
   return prisma.survey.findUnique({ where: { surveyCode }, include: surveyDetailInclude });
 }
@@ -105,7 +113,11 @@ export function createSurvey(data: Prisma.SurveyUncheckedCreateInput) {
 }
 
 export function updateSurvey(id: string, data: Prisma.SurveyUncheckedUpdateInput) {
-  return prisma.survey.update({ where: { id }, data, include: surveyDetailInclude });
+  return prisma.survey.update({
+    where: { id },
+    data: { ...data, version: { increment: 1 } },
+    include: surveyDetailInclude,
+  });
 }
 
 export function deactivateAssignments(surveyId: string) {

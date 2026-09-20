@@ -153,3 +153,47 @@
     color: var(--foreground);
   }
 }
+
+
+/*
+ * Landing page backdrop.
+ *
+ * The public page reuses the shared dark tokens (its wrapper carries the `dark` class), so the
+ * palette, borders and text colours are the ones the rest of the app already uses. The wrapper also
+ * carries `landing-shell`, the single place the bar height is defined: the nav and the hero share
+ * it, so the photo runs up behind the bar and the navigation takes the colour of the image instead
+ * of sitting on top of it as a separate black strip.
+ */
+.landing-shell {
+  --landing-nav-height: 3.75rem;
+}
+
+.landing-nav {
+  min-height: var(--landing-nav-height);
+}
+
+.landing-hero {
+  margin-top: calc(-1 * var(--landing-nav-height));
+  padding-top: var(--landing-nav-height);
+  background-color: var(--background);
+  background-image: linear-gradient(to bottom, oklch(0 0 0 / 0.35), oklch(0 0 0 / 0.35)),
+    linear-gradient(
+      to bottom,
+      oklch(0 0 0 / 0.35) 0%,
+      transparent 20%,
+      transparent 64%,
+      var(--background) 100%
+    ),
+    url("/hero-backdrop.jpg");
+  background-position: center top, center top, center 38%;
+  background-repeat: no-repeat, no-repeat, no-repeat;
+  background-size: cover, cover, cover;
+}
+
+/* The closing sentence of the headline steps from white to grey: no colour leaves the palette. */
+.landing-accent-text {
+  background-image: linear-gradient(180deg, oklch(1 0 0) 35%, oklch(0.74 0 0) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}

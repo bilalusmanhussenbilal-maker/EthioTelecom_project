@@ -1,18 +1,21 @@
 "use client";
 
-import { Monitor, Moon, Sun } from "lucide-react";
+import { Moon, Sun } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
-import type { Theme } from "@/components/theme-provider";
+import type { ResolvedTheme } from "@/components/theme-provider";
 import { cn } from "@/lib/utils";
 
-const OPTIONS: ReadonlyArray<{ value: Theme; label: string; Icon: typeof Sun }> = [
+const OPTIONS: ReadonlyArray<{ value: ResolvedTheme; label: string; Icon: typeof Sun }> = [
   { value: "light", label: "Light theme", Icon: Sun },
   { value: "dark", label: "Dark theme", Icon: Moon },
-  { value: "system", label: "System theme", Icon: Monitor },
 ];
 
+/**
+ * Light or dark only. A first-time visitor still follows the device setting until they pick a side,
+ * which is why the active state comes from the resolved theme rather than the stored preference.
+ */
 export function ThemeToggle({ className }: { className?: string }) {
-  const { theme, setTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
 
   return (
     <div
@@ -24,7 +27,7 @@ export function ThemeToggle({ className }: { className?: string }) {
       )}
     >
       {OPTIONS.map(({ value, label, Icon }) => {
-        const isActive = theme === value;
+        const isActive = resolvedTheme === value;
 
         return (
           <button

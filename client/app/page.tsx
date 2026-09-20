@@ -10,104 +10,99 @@ import {
   Network,
   ScrollText,
   ShieldCheck,
-  Wifi,
   WifiOff,
 } from "lucide-react";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { StatusBadge } from "@/components/ui/status-badge";
 import { cn } from "@/lib/utils";
 
 const CONTAINER = "mx-auto w-full max-w-6xl px-4 sm:px-6";
 
+const HERO_FACTS = ["Works offline", "GPS verified", "Role-based access"] as const;
+
+const BENEFITS = [
+  {
+    icon: WifiOff,
+    title: "Works offline",
+    description: "Surveys and network data are cached on the device.",
+  },
+  {
+    icon: MapPin,
+    title: "GPS verified",
+    description: "Latitude, longitude, accuracy and time on every submission.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Validated up front",
+    description: "The box, port, line and capacity are checked before submission.",
+  },
+  {
+    icon: ScrollText,
+    title: "Fully audited",
+    description: "Every open, edit, submission and review is logged.",
+  },
+] as const;
+
 const WORKFLOW = [
-  { title: "Service", description: "Look up the service, its address and its area." },
-  { title: "Old network", description: "Confirm the box, port and line in use today." },
-  { title: "Change or shift", description: "Decide the new connection or the relocation." },
-  { title: "New network", description: "Choose an available box, port and line." },
-  { title: "Survey", description: "Verify on site and record what you actually found." },
-  { title: "Verification", description: "The supervisor reviews the result and decides." },
-  { title: "Completion", description: "Approved and closed with a full activity history." },
+  { title: "Service", description: "Find the service and its address." },
+  { title: "Old network", description: "Confirm the current box, port and line." },
+  { title: "Change or shift", description: "Choose the new connection or move." },
+  { title: "New network", description: "Pick an available box, port and line." },
+  { title: "Survey", description: "Verify on site and record what you found." },
+  { title: "Verification", description: "The supervisor reviews and decides." },
+  { title: "Completion", description: "Approved, closed and logged." },
 ] as const;
 
 const ROLES = [
   {
     icon: ClipboardList,
     title: "Technician",
-    summary: "Works the assigned survey on site.",
-    points: [
-      "Search services and open assigned surveys",
-      "Compare the old and the new network path",
-      "Verify the box, port, line and capacity",
-      "Save offline and submit when back online",
-    ],
+    summary: "Surveys assigned jobs on site.",
+    points: ["Search services", "Compare old and new network", "Verify box, port and line"],
   },
   {
     icon: ClipboardCheck,
     title: "Supervisor",
-    summary: "Reviews the work and owns the decision.",
-    points: [
-      "Monitor technicians and open surveys",
-      "Read the field observations and GPS record",
-      "Approve, reject or return with a remark",
-      "Report on completion and return rates",
-    ],
+    summary: "Reviews the work and decides.",
+    points: ["Monitor technicians", "Approve, reject or return", "Report on completion"],
   },
   {
     icon: Boxes,
     title: "Administrator",
-    summary: "Keeps the data every survey depends on correct.",
-    points: [
-      "Manage users, roles and technicians",
-      "Maintain boxes, ports, lines and areas",
-      "Configure GPS accuracy and logging rules",
-      "Follow every action in the activity log",
-    ],
+    summary: "Owns the network data.",
+    points: ["Manage users and roles", "Maintain boxes, ports and lines", "Configure thresholds and logging"],
   },
 ] as const;
 
-const CAPABILITIES = [
-  {
-    icon: WifiOff,
-    title: "Built for no signal",
-    description:
-      "Assigned surveys and the network data they need are cached on the device. Work is saved locally and synchronised automatically when the connection returns, with conflicts surfaced instead of silently overwritten.",
-  },
-  {
-    icon: MapPin,
-    title: "GPS-verified visits",
-    description:
-      "Every submission records latitude, longitude, accuracy and a timestamp, then compares the technician's position with the expected service location. Weak accuracy is flagged before the survey can be sent.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Feasibility before submission",
-    description:
-      "The server checks that the box exists, the port is free, the line reaches it and the capacity is sufficient, so an impossible connection is caught in the field instead of weeks later.",
-  },
-  {
-    icon: ScrollText,
-    title: "Every action logged",
-    description:
-      "Opens, edits, submissions and reviews are written to an audit trail with the responsible user, so a supervisor can see how a survey arrived and what changed along the way.",
-  },
-] as const;
-
-function PreviewRow({ label, value }: { label: string; value: string }) {
+function SectionHeading({
+  id,
+  eyebrow,
+  title,
+  description,
+}: {
+  id: string;
+  eyebrow: string;
+  title: string;
+  description: string;
+}) {
   return (
-    <div className="flex items-baseline justify-between gap-3">
-      <dt className="shrink-0 text-muted-foreground">{label}</dt>
-      <dd className="text-right font-medium">{value}</dd>
+    <div className="mx-auto max-w-2xl space-y-3 text-center">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+        {eyebrow}
+      </p>
+      <h2 id={id} className="text-3xl font-semibold tracking-tight sm:text-4xl">
+        {title}
+      </h2>
+      <p className="text-pretty text-base text-muted-foreground">{description}</p>
     </div>
   );
 }
 
 export default function Home() {
   return (
-    <div className="flex min-h-dvh flex-col">
-      <header className="border-b border-border">
+    <div className="landing-shell dark flex min-h-dvh flex-col bg-background text-foreground">
+      <header className="landing-nav sticky top-0 z-50 bg-background/50 backdrop-blur-md">
         <div className={cn(CONTAINER, "flex items-center gap-3 py-3")}>
           <Link
             href="/"
@@ -123,8 +118,7 @@ export default function Home() {
           </Link>
 
           <div className="ml-auto flex items-center gap-1.5">
-            <ThemeToggle />
-            <Link href="/login" className={buttonVariants({ size: "sm" })}>
+           <Link href="/login" className={buttonVariants({ size: "sm" })}>
               <LogIn aria-hidden />
               Sign in
             </Link>
@@ -133,38 +127,30 @@ export default function Home() {
       </header>
 
       <main className="flex-1">
-        <section
-          aria-labelledby="hero-heading"
-          className={cn(
-            CONTAINER,
-            "grid gap-10 py-12 sm:py-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-14 lg:py-20",
-          )}
-        >
-          <div className="space-y-6">
-            <Badge variant="outline">
-              <Wifi aria-hidden className="size-3.5" />
-              Fixed and Wi-Fi network operations
+        <section className="landing-hero relative overflow-hidden text-foreground">
+          <div
+            className={cn(
+              CONTAINER,
+              "relative z-10 flex flex-col items-center gap-7 py-20 text-center sm:py-28 lg:py-32",
+            )}
+          >
+            <Badge variant="outline" className="border-white/20 bg-white/10 text-white/80 backdrop-blur">
+              Field survey platform
             </Badge>
 
-            <div className="space-y-4">
-              <h1
-                id="hero-heading"
-                className="text-balance text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl"
-              >
-                Verify every network change on site, then hand it straight to review.
-              </h1>
-              <p className="max-w-xl text-pretty text-base text-muted-foreground sm:text-lg">
-                Network Service Survey puts the service, the old network and the proposed new network
-                on one screen. Technicians confirm the box, port and line, record what they found and
-                submit a GPS-verified survey that a supervisor can approve without chasing paperwork.
-              </p>
-            </div>
+            <h1 className="text-balance text-4xl font-semibold leading-[1.08] tracking-tight sm:text-5xl lg:text-6xl">
+              Survey the network on site.
+              <br className="hidden sm:block" />{" "}
+              <span className="landing-accent-text">Approve it in one place.</span>
+            </h1>
 
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Link
-                href="/login"
-                className={cn(buttonVariants({ size: "lg" }), "w-full sm:w-auto")}
-              >
+            <p className="max-w-xl text-pretty text-base text-foreground/80 sm:text-lg">
+              One screen for the service, the old network and the new one. Confirm the box, port and
+              line, then submit a GPS-verified survey.
+            </p>
+
+            <div className="flex w-full flex-col justify-center gap-3 sm:w-auto sm:flex-row">
+              <Link href="/login" className={cn(buttonVariants({ size: "lg" }), "w-full sm:w-auto")}>
                 <LogIn aria-hidden />
                 Sign in
               </Link>
@@ -172,44 +158,49 @@ export default function Home() {
                 href="#workflow"
                 className={cn(
                   buttonVariants({ variant: "outline", size: "lg" }),
-                  "w-full sm:w-auto",
+                  "w-full border-white/20 bg-white/5 hover:bg-white/10 sm:w-auto",
                 )}
               >
-                See how it works
+                How it works
                 <ArrowRight aria-hidden />
               </Link>
             </div>
+
+            <ul className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-foreground/75">
+              {HERO_FACTS.map((fact) => (
+                <li key={fact} className="flex items-center gap-2">
+                  <Check aria-hidden className="size-4 text-foreground" />
+                  {fact}
+                </li>
+              ))}
+            </ul>
           </div>
+        </section>
 
-          <figure className="w-full max-w-md lg:max-w-none">
-            <Card className="overflow-hidden shadow-sm">
-              <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/40 px-4 py-3">
-                <p className="font-mono text-sm font-medium">SV-2026-0148</p>
-                <StatusBadge tone="progress">In progress</StatusBadge>
-              </div>
-              <CardContent className="space-y-4 p-4 sm:p-5">
-                <dl className="space-y-2.5 text-sm">
-                  <PreviewRow label="Service" value="Fixed line, Zone 3" />
-                  <PreviewRow label="Old network" value="BOX-22 / PORT-04 / LINE-05" />
-                  <PreviewRow label="New network" value="BOX-22 / PORT-03 / LINE-05" />
-                  <PreviewRow label="Capacity" value="32 of 100 used" />
-                </dl>
+        <section aria-labelledby="benefits-heading" className={cn(CONTAINER, "space-y-10 py-16 sm:py-20")}>
+          <SectionHeading
+            id="benefits-heading"
+            eyebrow="Why it works"
+            title="Built for field work"
+            description="Designed around lost signal, occupied ports and unclear handovers."
+          />
 
-                <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
-                  <StatusBadge tone="success">Technically feasible</StatusBadge>
-                  <StatusBadge tone="warning">Pending sync</StatusBadge>
-                </div>
-
-                <p className="text-xs text-muted-foreground">
-                  GPS accuracy 8 m, captured at 10:42.
-                </p>
-              </CardContent>
-            </Card>
-            <figcaption className="mt-3 text-xs text-muted-foreground">
-              A survey as the technician sees it: existing network data is already filled in, so only
-              the field observations are entered.
-            </figcaption>
-          </figure>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {BENEFITS.map(({ icon: Icon, title, description }) => (
+              <Card
+                key={title}
+                className="h-full transition-colors hover:border-primary/40"
+              >
+                <CardContent className="flex h-full flex-col gap-3 p-6">
+                  <span className="inline-flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <Icon aria-hidden className="size-5" />
+                  </span>
+                  <h3 className="text-base font-semibold leading-tight">{title}</h3>
+                  <p className="text-sm text-muted-foreground">{description}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </section>
 
         <section
@@ -217,31 +208,25 @@ export default function Home() {
           aria-labelledby="workflow-heading"
           className="border-y border-border bg-muted/40"
         >
-          <div className={cn(CONTAINER, "space-y-8 py-12 sm:py-16")}>
-            <div className="max-w-2xl space-y-2">
-              <h2
-                id="workflow-heading"
-                className="text-2xl font-semibold tracking-tight sm:text-3xl"
-              >
-                One survey, seven steps
-              </h2>
-              <p className="text-pretty text-sm text-muted-foreground sm:text-base">
-                Every screen follows the same path, from the first service lookup to the approved
-                result.
-              </p>
-            </div>
+          <div className={cn(CONTAINER, "space-y-10 py-16 sm:py-20")}>
+            <SectionHeading
+              id="workflow-heading"
+              eyebrow="Workflow"
+              title="One survey, seven steps"
+              description="The same path on every screen, from service lookup to approval."
+            />
 
-            <ol className="grid gap-x-8 gap-y-6 sm:grid-cols-2 lg:grid-cols-4">
+            <ol className="grid gap-x-8 gap-y-8 sm:grid-cols-2 lg:grid-cols-4">
               {WORKFLOW.map((step, index) => (
-                <li key={step.title} className="flex gap-3">
+                <li key={step.title} className="flex gap-4">
                   <span
                     aria-hidden
-                    className="inline-flex size-7 shrink-0 items-center justify-center rounded-full border border-border bg-card text-xs font-semibold tabular-nums"
+                    className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-primary/40 bg-primary/10 text-sm font-semibold tabular-nums text-primary"
                   >
                     {index + 1}
                   </span>
-                  <div className="space-y-0.5">
-                    <h3 className="text-sm font-medium leading-tight">{step.title}</h3>
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-semibold leading-tight">{step.title}</h3>
                     <p className="text-sm text-muted-foreground">{step.description}</p>
                   </div>
                 </li>
@@ -250,35 +235,32 @@ export default function Home() {
           </div>
         </section>
 
-        <section aria-labelledby="roles-heading" className={cn(CONTAINER, "space-y-8 py-12 sm:py-16")}>
-          <div className="max-w-2xl space-y-2">
-            <h2 id="roles-heading" className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              Built around three roles
-            </h2>
-            <p className="text-pretty text-sm text-muted-foreground sm:text-base">
-              Access follows the role, and the server enforces it: technicians survey, supervisors
-              decide, administrators keep the network data correct.
-            </p>
-          </div>
+        <section aria-labelledby="roles-heading" className={cn(CONTAINER, "space-y-10 py-16 sm:py-20")}>
+          <SectionHeading
+            id="roles-heading"
+            eyebrow="Roles"
+            title="Three roles, one workflow"
+            description="Technicians survey, supervisors decide, administrators keep the data correct."
+          />
 
           <div className="grid gap-4 lg:grid-cols-3">
             {ROLES.map(({ icon: Icon, title, summary, points }) => (
-              <Card key={title} className="h-full">
-                <CardContent className="flex h-full flex-col gap-4 p-5">
+              <Card key={title} className="h-full transition-colors hover:border-primary/40">
+                <CardContent className="flex h-full flex-col gap-5 p-6">
                   <div className="flex items-start gap-3">
-                    <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                       <Icon aria-hidden className="size-5" />
                     </span>
-                    <div className="space-y-0.5">
+                    <div className="space-y-1">
                       <h3 className="text-base font-semibold leading-tight">{title}</h3>
                       <p className="text-sm text-muted-foreground">{summary}</p>
                     </div>
                   </div>
 
-                  <ul className="space-y-2 text-sm">
+                  <ul className="space-y-2 text-sm text-muted-foreground">
                     {points.map((point) => (
                       <li key={point} className="flex gap-2">
-                        <Check aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                        <Check aria-hidden className="mt-0.5 size-4 shrink-0 text-primary" />
                         <span>{point}</span>
                       </li>
                     ))}
@@ -288,58 +270,31 @@ export default function Home() {
             ))}
           </div>
         </section>
-
-        <section
-          aria-labelledby="capabilities-heading"
-          className="border-t border-border bg-muted/40"
-        >
-          <div className={cn(CONTAINER, "space-y-8 py-12 sm:py-16")}>
-            <div className="max-w-2xl space-y-2">
-              <h2
-                id="capabilities-heading"
-                className="text-2xl font-semibold tracking-tight sm:text-3xl"
-              >
-                Made for the field, not the office
-              </h2>
-              <p className="text-pretty text-sm text-muted-foreground sm:text-base">
-                Lost signal, occupied ports and unclear handovers are the failure modes this platform
-                is designed around.
-              </p>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              {CAPABILITIES.map(({ icon: Icon, title, description }) => (
-                <div key={title} className="flex gap-3 rounded-xl border border-border bg-card p-5">
-                  <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                    <Icon aria-hidden className="size-4" />
-                  </span>
-                  <div className="space-y-1">
-                    <h3 className="text-sm font-semibold">{title}</h3>
-                    <p className="text-sm text-muted-foreground">{description}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
       </main>
 
       <footer className="border-t border-border">
         <div
           className={cn(
             CONTAINER,
-            "flex flex-col gap-3 py-6 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between",
+            "flex flex-col items-center gap-4 py-8 text-center sm:flex-row sm:justify-between sm:text-left",
           )}
         >
-          <p className="flex items-center gap-2">
-            <Network aria-hidden className="size-4" />
-            Network Service Survey
-          </p>
-          <p className="text-xs">
-            Field survey platform for fixed and Wi-Fi network technicians and their supervisors.
-          </p>
-          <Link href="/login" className="font-medium text-foreground underline-offset-4 hover:underline">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <Network aria-hidden className="size-4" />
+            </span>
+            <div className="leading-tight">
+              <p className="text-sm font-semibold">Network Service Survey</p>
+              <p className="text-xs text-muted-foreground">Fixed and Wi-Fi network field teams.</p>
+            </div>
+          </div>
+
+          <Link
+            href="/login"
+            className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "text-muted-foreground")}
+          >
             Sign in
+            <ArrowRight aria-hidden />
           </Link>
         </div>
       </footer>

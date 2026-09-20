@@ -1,4 +1,4 @@
-import { BarChart3, ClipboardList, HardHat, LayoutDashboard, Network, Search, Users } from "lucide-react";
+import { BarChart3, ClipboardList, HardHat, History, LayoutDashboard, Network, Search, Settings2, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { UserRole } from "@/lib/api/types";
 
@@ -50,6 +50,18 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/admin/users",
     label: "Users",
     icon: Users,
+    roles: ["ADMIN"],
+  },
+  {
+    href: "/admin/settings",
+    label: "Settings",
+    icon: Settings2,
+    roles: ["ADMIN"],
+  },
+  {
+    href: "/admin/activity",
+    label: "Activity log",
+    icon: History,
     roles: ["ADMIN"],
   },
 ];

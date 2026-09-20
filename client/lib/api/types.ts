@@ -293,7 +293,19 @@ export interface SurveyDetail {
   assignments: SurveyAssignment[];
 }
 
+/**
+ * The technician-facing subset of the system configuration. It travels with the form data so the
+ * client enforces exactly the thresholds the server will apply, and so an offline snapshot keeps
+ * working without a second request.
+ */
+export interface SurveyPolicy {
+  gpsMaxAccuracyMeters: number;
+  gpsServiceRadiusMeters: number;
+}
+
 export interface SurveyFormData {
+  /** Optional because a snapshot cached by an older build of the app does not carry it yet. */
+  policy?: SurveyPolicy;
   survey: {
     id: string;
     surveyCode: string;
@@ -561,4 +573,43 @@ export interface SyncPullResponse {
   surveys: SurveyDetail[];
   forms: SurveyFormData[];
   networkOptions: { areas: AreaDetail[]; boxes: BoxOption[]; lines: LineDetail[] };
+}
+
+/* --------------------------------------------------- administrator settings -- */
+
+export interface SystemSettingDescriptor {
+  key: string;
+  group: string;
+  label: string;
+  description: string;
+  unit: string | null;
+  min: number;
+  max: number;
+  step: number;
+  defaultValue: number;
+}
+
+/** A setting an administrator has saved, as opposed to one still using the deployment default. */
+export interface StoredSystemSetting {
+  key: string;
+  value: number;
+  updatedAt: string;
+  updatedBy: { id: string; fullName: string; username: string } | null;
+}
+
+export interface SystemSettingsResponse {
+  settings: Record<string, number>;
+  stored: StoredSystemSetting[];
+  definitions: SystemSettingDescriptor[];
+}
+
+export interface SystemSettingChange {
+  key: string;
+  label: string;
+  from: number;
+  to: number;
+}
+
+export interface SystemSettingsUpdateResponse extends SystemSettingsResponse {
+  changed: SystemSettingChange[];
 }

@@ -91,11 +91,12 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  technician        Technician?
-  reviewedSurveys   Survey[]           @relation("SurveyReviewer")
-  createdSurveys    Survey[]           @relation("SurveyCreator")
-  assignmentsMade   SurveyAssignment[] @relation("AssignmentSupervisor")
-  activityLogs      ActivityLog[]
+  technician      Technician?
+  reviewedSurveys Survey[]           @relation("SurveyReviewer")
+  createdSurveys  Survey[]           @relation("SurveyCreator")
+  assignmentsMade SurveyAssignment[] @relation("AssignmentSupervisor")
+  activityLogs    ActivityLog[]
+  updatedSettings SystemSetting[]    @relation("SystemSettingUpdatedBy")
 
   @@map("users")
 }
@@ -123,8 +124,8 @@ model Area {
   zone     String?
   parentId String?
 
-  parent   Area?    @relation("AreaHierarchy", fields: [parentId], references: [id])
-  children Area[]   @relation("AreaHierarchy")
+  parent   Area?     @relation("AreaHierarchy", fields: [parentId], references: [id])
+  children Area[]    @relation("AreaHierarchy")
   services Service[]
   boxes    Box[]
   lines    Line[]
@@ -159,16 +160,16 @@ model Service {
 }
 
 model Box {
-  id         String    @id @default(cuid())
-  code       String    @unique
-  name       String?
-  type       BoxType
-  status     BoxStatus @default(ACTIVE)
-  areaId     String?
-  latitude   Float?
-  longitude  Float?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id        String    @id @default(cuid())
+  code      String    @unique
+  name      String?
+  type      BoxType
+  status    BoxStatus @default(ACTIVE)
+  areaId    String?
+  latitude  Float?
+  longitude Float?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   area           Area?        @relation(fields: [areaId], references: [id])
   ports          Port[]
@@ -229,8 +230,8 @@ model LineHop {
   nodeCode String
   boxId    String?
 
-  line Line  @relation(fields: [lineId], references: [id], onDelete: Cascade)
-  box  Box?  @relation(fields: [boxId], references: [id])
+  line Line @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  box  Box? @relation(fields: [boxId], references: [id])
 
   @@unique([lineId, sequence])
   @@index([nodeCode])
@@ -283,11 +284,11 @@ model Survey {
   technicianId String?
   createdById  String?
 
-  boxStatus         BoxStatus?
-  portStatus        PortStatus?
-  lineStatus        LineStatus?
-  availableCapacity Int?
-  requiredCapacity  Int?
+  boxStatus          BoxStatus?
+  portStatus         PortStatus?
+  lineStatus         LineStatus?
+  availableCapacity  Int?
+  requiredCapacity   Int?
   feasibilityStatus  FeasibilityStatus?
   feasibilityReasons Json?
   technicianRemark   String?
@@ -302,12 +303,12 @@ model Survey {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  service     Service            @relation(fields: [serviceId], references: [id])
-  technician  Technician?        @relation(fields: [technicianId], references: [id])
-  createdBy   User?              @relation("SurveyCreator", fields: [createdById], references: [id])
-  reviewedBy  User?              @relation("SurveyReviewer", fields: [reviewedById], references: [id])
-  gpsRecord   GpsRecord?
-  assignments SurveyAssignment[]
+  service      Service            @relation(fields: [serviceId], references: [id])
+  technician   Technician?        @relation(fields: [technicianId], references: [id])
+  createdBy    User?              @relation("SurveyCreator", fields: [createdById], references: [id])
+  reviewedBy   User?              @relation("SurveyReviewer", fields: [reviewedById], references: [id])
+  gpsRecord    GpsRecord?
+  assignments  SurveyAssignment[]
   activityLogs ActivityLog[]
 
   @@index([serviceId])
@@ -380,4 +381,17 @@ model ActivityLog {
   @@index([userId])
   @@index([createdAt])
   @@map("activity_logs")
+}
+
+/// Administrator-editable runtime configuration (GPS thresholds, log noise windows).
+/// Only keys defined in src/config/settings.ts are ever read; anything else is ignored.
+model SystemSetting {
+  key         String   @id
+  value       Json
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+
+  updatedBy User? @relation("SystemSettingUpdatedBy", fields: [updatedById], references: [id])
+
+  @@map("system_settings")
 }

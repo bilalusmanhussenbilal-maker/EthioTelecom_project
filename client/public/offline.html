@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Offline | Network Service Survey</title>
+    <script>
+      // Same decision as the app's own bootstrap script, so a technician working in dark mode is
+      // not hit by a white flash in the middle of a dark street.
+      (function () {
+        try {
+          var stored = localStorage.getItem("survey-theme");
+          var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var dark = stored === "dark" || ((stored === "system" || !stored) && prefersDark);
+          document.documentElement.classList.toggle("dark", dark);
+          document.documentElement.style.colorScheme = dark ? "dark" : "light";
+        } catch (error) {}
+      })();
+    </script>
+    <style>
+      :root {
+        --background: oklch(0.99 0 0);
+        --card: oklch(1 0 0);
+        --foreground: oklch(0 0 0);
+        --muted-foreground: oklch(0.44 0 0);
+        --border: oklch(0.92 0 0);
+        --primary: oklch(0 0 0);
+        --primary-foreground: oklch(1 0 0);
+        --radius: 0.5rem;
+      }
+
+      .dark {
+        --background: oklch(0 0 0);
+        --card: oklch(0.14 0 0);
+        --foreground: oklch(1 0 0);
+        --muted-foreground: oklch(0.72 0 0);
+        --border: oklch(0.26 0 0);
+        --primary: oklch(1 0 0);
+        --primary-foreground: oklch(0 0 0);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1.5rem;
+        background: var(--background);
+        color: var(--foreground);
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      main {
+        width: 100%;
+        max-width: 30rem;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) + 4px);
+        background: var(--card);
+        padding: 1.5rem;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--muted-foreground);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .dot {
+        width: 0.5rem;
+        height: 0.5rem;
+        border-radius: 999px;
+        background: var(--muted-foreground);
+      }
+
+      h1 {
+        margin: 0.75rem 0 0.5rem;
+        font-size: 1.25rem;
+        line-height: 1.3;
+      }
+
+      p {
+        margin: 0 0 0.75rem;
+        font-size: 0.875rem;
+        color: var(--muted-foreground);
+      }
+
+      ul {
+        margin: 0 0 1.25rem;
+        padding-left: 1.1rem;
+        font-size: 0.875rem;
+        color: var(--muted-foreground);
+      }
+
+      li + li {
+        margin-top: 0.35rem;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+
+      button,
+      a.button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 2.5rem;
+        padding: 0 1rem;
+        border-radius: var(--radius);
+        border: 1px solid transparent;
+        background: var(--primary);
+        color: var(--primary-foreground);
+        font: inherit;
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        text-decoration: none;
+      }
+
+      a.button {
+        background: transparent;
+        border-color: var(--border);
+        color: var(--foreground);
+      }
+
+      button:focus-visible,
+      a.button:focus-visible {
+        outline: 2px solid var(--foreground);
+        outline-offset: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="badge"><span class="dot" aria-hidden="true"></span> Offline</p>
+      <h1>No connection to the server</h1>
+      <p>
+        The app is still on this device, but this screen was not saved for offline use and cannot
+        be opened without a connection.
+      </p>
+      <ul>
+        <li>Surveys you already opened are available from the Surveys list.</li>
+        <li>Work you saved offline is kept and sent as soon as the connection returns.</li>
+        <li>Nothing you entered has been discarded.</li>
+      </ul>
+      <div class="actions">
+        <button type="button" onclick="window.location.reload()">Try again</button>
+        <a class="button" href="/surveys">Go to my surveys</a>
+      </div>
+    </main>
+  </body>
+</html>

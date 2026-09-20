@@ -1,7 +1,9 @@
+import { History } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { activityPresentation } from "@/lib/activity";
 import { formatDateTime } from "@/lib/format";
-import { History } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { ActivityEntry } from "@/lib/api/types";
 
 export function SurveyTimeline({ activity }: { activity: ActivityEntry[] }) {
@@ -18,18 +20,32 @@ export function SurveyTimeline({ activity }: { activity: ActivityEntry[] }) {
           <EmptyState title="No activity yet" description="Actions on this survey will appear here." />
         ) : (
           <ol className="space-y-4">
-            {activity.map((entry) => (
-              <li key={entry.id} className="flex gap-3">
-                <span aria-hidden className="mt-1.5 size-2 shrink-0 rounded-full bg-primary" />
-                <div className="space-y-0.5">
-                  <p className="text-sm">{entry.message}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatDateTime(entry.createdAt)}
-                    {entry.user ? ` - ${entry.user.fullName}` : ""}
-                  </p>
-                </div>
-              </li>
-            ))}
+            {activity.map((entry) => {
+              // Keeps a long timeline scannable: the shape and colour say what happened before
+              // the text does.
+              const { icon: Icon, className } = activityPresentation(entry.action);
+
+              return (
+                <li key={entry.id} className="flex gap-3">
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full",
+                      className,
+                    )}
+                  >
+                    <Icon className="size-3.5" />
+                  </span>
+                  <div className="space-y-0.5">
+                    <p className="text-sm">{entry.message}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDateTime(entry.createdAt)}
+                      {entry.user ? ` - ${entry.user.fullName}` : ""}
+                    </p>
+                  </div>
+                </li>
+              );
+            })}
           </ol>
         )}
       </CardContent>

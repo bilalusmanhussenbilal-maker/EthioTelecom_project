@@ -3,6 +3,7 @@ import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import { AuthProvider } from "@/lib/auth/auth-provider";
 import { SyncProvider } from "@/lib/offline/sync-provider";
+import { ServiceWorkerRegistrar } from "@/components/app/service-worker-registrar";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body className="min-h-dvh bg-background font-sans text-foreground antialiased">
+        <ServiceWorkerRegistrar />
         <ThemeProvider>
           <AuthProvider>
             <SyncProvider>{children}</SyncProvider>

@@ -13,6 +13,7 @@ import { FeasibilityBadge } from "@/components/app/survey-badges";
 import { RouteChips } from "@/components/survey/network-path-view";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -37,6 +38,12 @@ import type {
 import { useSync } from "@/lib/offline/sync-provider";
 import type { QueuedMutation } from "@/lib/offline/storage";
 import { SyncConflictBanner } from "@/components/app/sync-conflict-banner";
+
+/**
+ * Fallback for a form cached before the server started sending its policy with the form data.
+ * The server is the authority, so this only ever covers a stale offline snapshot.
+ */
+const DEFAULT_GPS_MAX_ACCURACY_METERS = 150;
 
 const BOX_STATUS_OPTIONS: BoxStatus[] = ["ACTIVE", "FAULTY", "INACTIVE"];
 const PORT_STATUS_OPTIONS: PortStatus[] = ["AVAILABLE", "OCCUPIED", "FAULTY"];
@@ -179,6 +186,7 @@ function SurveyForm({ id, initial, options, onSaved }: SurveyFormProps) {
 
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [confirmingSubmit, setConfirmingSubmit] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [draftRestored, setDraftRestored] = useState(draft !== null);
@@ -495,7 +503,12 @@ function SurveyForm({ id, initial, options, onSaved }: SurveyFormProps) {
     }
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  /**
+   * Submitting hands the survey to the supervisor and closes it for editing, so it asks first.
+   * Validation that would block the submit runs before the dialog, not after: there is no point
+   * confirming an action that cannot proceed.
+   */
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!location) {
@@ -508,6 +521,17 @@ function SurveyForm({ id, initial, options, onSaved }: SurveyFormProps) {
       return;
     }
 
+    setError(null);
+    setNotice(null);
+    setConfirmingSubmit(true);
+  }
+
+  async function performSubmit() {
+    if (!location) {
+      return;
+    }
+
+    setConfirmingSubmit(false);
     setSubmitting(true);
     setError(null);
     setNotice(null);
@@ -546,9 +570,11 @@ function SurveyForm({ id, initial, options, onSaved }: SurveyFormProps) {
     }
   }
 
-  const accuracyTooWeak = location !== null && location.accuracy > 150;
+  const gpsMaxAccuracyMeters = initial.policy?.gpsMaxAccuracyMeters ?? DEFAULT_GPS_MAX_ACCURACY_METERS;
+  const accuracyTooWeak = location !== null && location.accuracy > gpsMaxAccuracyMeters;
 
   return (
+    <>
     <form className="space-y-5" onSubmit={handleSubmit} noValidate>
       <PageHeader
         title={`Survey ${initial.survey.surveyCode}`}
@@ -875,7 +901,7 @@ function SurveyForm({ id, initial, options, onSaved }: SurveyFormProps) {
           {accuracyTooWeak ? (
             <Alert tone="warning" title="Weak GPS fix">
               <p>
-                Accuracy is {formatMeters(location?.accuracy ?? null)}, which is worse than the 150 m the server
+                Accuracy is {formatMeters(location?.accuracy ?? null)}, which is worse than the {gpsMaxAccuracyMeters} m the server
                 accepts. Move to an open area and capture again.
               </p>
             </Alert>
@@ -918,5 +944,73 @@ function SurveyForm({ id, initial, options, onSaved }: SurveyFormProps) {
         </Link>
       </div>
     </form>
+
+    <Dialog
+      open={confirmingSubmit}
+      onClose={() => setConfirmingSubmit(false)}
+      title="Submit this survey?"
+      description="It goes to your supervisor for review and you will not be able to edit it afterwards."
+      footer={
+        <>
+          <Button type="button" variant="outline" onClick={() => setConfirmingSubmit(false)}>
+            Keep editing
+          </Button>
+          <Button
+            type="button"
+            onClick={() => {
+              void performSubmit();
+            }}
+            disabled={submitting}
+          >
+            {submitting ? <Loader2 aria-hidden className="animate-spin" /> : <Send aria-hidden />}
+            Submit survey
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <KeyValueGrid>
+          <KeyValue label="Survey">{initial.survey.surveyCode}</KeyValue>
+          <KeyValue label="Box">{selectedBox?.code ?? "Not selected"}</KeyValue>
+          <KeyValue label="Port">
+            {selectedBox?.ports.find((port) => port.id === portId)?.code ?? "Not selected"}
+          </KeyValue>
+          <KeyValue label="Line">
+            {options.lines.find((line) => line.id === lineId)?.code ?? "Not selected"}
+          </KeyValue>
+          <KeyValue label="GPS accuracy">{formatMeters(location?.accuracy ?? null)}</KeyValue>
+        </KeyValueGrid>
+
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Feasibility</span>
+          <FeasibilityBadge status={feasibility?.status ?? null} />
+        </div>
+
+        {checkState !== "synced" ? (
+          <Alert tone="info" title="Feasibility is not confirmed yet">
+            <p>{feasibilityHint}</p>
+          </Alert>
+        ) : null}
+
+        {feasibility && !feasibility.feasible ? (
+          <Alert tone="warning" title="This target is not technically feasible">
+            <p>
+              You can still submit, but your remark explaining the situation is what the supervisor
+              will review.
+            </p>
+          </Alert>
+        ) : null}
+
+        {!syncState.online ? (
+          <Alert tone="info" title="You are offline">
+            <p>
+              This submission is stored on your device and sent automatically once you are back
+              online.
+            </p>
+          </Alert>
+        ) : null}
+      </div>
+    </Dialog>
+    </>
   );
 }

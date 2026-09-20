@@ -6,6 +6,7 @@ export { getMe, login, logout } from "./auth";
 export { networkApi } from "./network";
 export { reportsApi } from "./reports";
 export { searchApi } from "./search";
+export { settingsApi } from "./settings";
 export { surveysApi } from "./surveys";
 export type {
   CreateSurveyPayload,

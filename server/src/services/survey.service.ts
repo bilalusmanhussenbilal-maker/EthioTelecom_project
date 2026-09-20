@@ -6,7 +6,6 @@ import type {
   PortStatus,
   SurveyStatus,
 } from "@prisma/client";
-import { env } from "../config/env.js";
 import { findBoxById, findLineById } from "../models/network.model.js";
 import {
   countSurveys,
@@ -36,6 +35,7 @@ import {
   type LineSnapshot,
   type PortSnapshot,
 } from "./feasibility.service.js";
+import { getSystemSettings } from "./settings.service.js";
 
 export interface SurveyActor {
   userId: string;
@@ -322,11 +322,60 @@ export async function getSurveyFormData(id: string, actor: SurveyActor) {
 
   assertCanRead(actor, survey);
 
+  await recordSurveyOpened(survey, actor);
+
   return buildSurveyFormData(survey);
+}
+
+/**
+ * Records that a technician actually opened a survey to work on it. Two things keep this from
+ * drowning the log: it is skipped for supervisors and admins, who only ever read, and repeat
+ * opens within the configured window are ignored — a reload or a back-navigation is not a new visit.
+ *
+ * Deliberately attached to `getSurveyFormData` and not to `buildSurveyFormData`: the offline sync
+ * pull builds form data for every assigned survey at once, and that is not a technician opening
+ * anything.
+ */
+async function recordSurveyOpened(
+  survey: { id: string; surveyCode: string },
+  actor: SurveyActor,
+): Promise<void> {
+  if (actor.role !== "TECHNICIAN") {
+    return;
+  }
+
+  try {
+    const { surveyOpenedDedupeMinutes } = await getSystemSettings();
+    const since = new Date(Date.now() - surveyOpenedDedupeMinutes * 60_000);
+
+    const recent = await prisma.activityLog.findFirst({
+      where: {
+        action: "SURVEY_OPENED",
+        userId: actor.userId,
+        surveyId: survey.id,
+        createdAt: { gte: since },
+      },
+      select: { id: true },
+    });
+
+    if (recent) {
+      return;
+    }
+
+    await recordActivity({
+      action: "SURVEY_OPENED",
+      message: `Survey ${survey.surveyCode} opened by ${actor.username}`,
+      userId: actor.userId,
+      surveyId: survey.id,
+    });
+  } catch {
+    // Audit logging must never stop a technician from loading their form.
+  }
 }
 
 export async function buildSurveyFormData(survey: SurveyDetailRecord) {
   const newNetworkRef = newNetworkRefFromDetail(survey.service.newNetwork);
+  const settings = await getSystemSettings();
   const [feasibility, availablePorts, candidateLines] = await Promise.all([
     computeFeasibility(newNetworkRef),
     newNetworkRef?.boxId
@@ -353,6 +402,12 @@ export async function buildSurveyFormData(survey: SurveyDetailRecord) {
   ]);
 
   return {
+    // The field app mirrors these instead of hardcoding them, so an administrator can change
+    // what a technician is held to without shipping a new build.
+    policy: {
+      gpsMaxAccuracyMeters: settings.gpsMaxAccuracyMeters,
+      gpsServiceRadiusMeters: settings.gpsServiceRadiusMeters,
+    },
     survey: {
       id: survey.id,
       version: survey.version,
@@ -636,6 +691,64 @@ export function saveFieldData(id: string, input: FieldDataInput, actor: SurveyAc
   return inTransaction(() => saveFieldDataInTransaction(id, input, actor));
 }
 
+type FieldValue = string | number | null;
+
+interface FieldChange {
+  field: string;
+  label: string;
+  from: FieldValue;
+  to: FieldValue;
+}
+
+const FIELD_LABELS: Record<keyof FieldDataInput, string> = {
+  newBoxId: "box",
+  newPortId: "port",
+  newLineId: "line",
+  requiredCapacity: "required capacity",
+  boxStatus: "box condition",
+  portStatus: "port condition",
+  lineStatus: "line condition",
+  availableCapacity: "available capacity",
+  technicianRemark: "remark",
+};
+
+/** Remarks can run to 2000 characters; the log wants the gist, not the essay. */
+function forLog(value: FieldValue): FieldValue {
+  if (typeof value === "string" && value.length > 120) {
+    return `${value.slice(0, 120)}...`;
+  }
+
+  return value;
+}
+
+/**
+ * Which fields this save actually altered. "Saved" on its own tells a supervisor nothing; knowing
+ * that the technician changed the port and the box condition is the reviewable part.
+ */
+function changedFields(previous: Record<string, FieldValue>, input: FieldDataInput): FieldChange[] {
+  const changes: FieldChange[] = [];
+
+  for (const key of Object.keys(FIELD_LABELS) as Array<keyof FieldDataInput>) {
+    const next = input[key];
+
+    // `undefined` means the client did not send the field at all, which is not a change.
+    if (next === undefined) {
+      continue;
+    }
+
+    const from = previous[key] ?? null;
+    const to: FieldValue = next ?? null;
+
+    if (from === to) {
+      continue;
+    }
+
+    changes.push({ field: key, label: FIELD_LABELS[key], from: forLog(from), to: forLog(to) });
+  }
+
+  return changes;
+}
+
 async function saveFieldDataInTransaction(id: string, input: FieldDataInput, actor: SurveyActor) {
   const survey = await findSurveyById(id);
 
@@ -644,6 +757,22 @@ async function saveFieldDataInTransaction(id: string, input: FieldDataInput, act
   }
 
   assertCanEdit(actor, survey);
+
+  // Captured before `applyNewNetwork`, which overwrites the box/port/line being compared against.
+  const changes = changedFields(
+    {
+      newBoxId: survey.service.newNetwork?.boxId ?? null,
+      newPortId: survey.service.newNetwork?.portId ?? null,
+      newLineId: survey.service.newNetwork?.lineId ?? null,
+      requiredCapacity: survey.service.newNetwork?.requiredCapacity ?? null,
+      boxStatus: survey.boxStatus,
+      portStatus: survey.portStatus,
+      lineStatus: survey.lineStatus,
+      availableCapacity: survey.availableCapacity,
+      technicianRemark: survey.technicianRemark,
+    },
+    input,
+  );
 
   await applyNewNetwork(survey.serviceId, input);
 
@@ -657,13 +786,22 @@ async function saveFieldDataInTransaction(id: string, input: FieldDataInput, act
     ...(REWORK_STATUSES.includes(survey.status) ? { status: "IN_PROGRESS" } : {}),
   };
 
+  const updated = await updateSurvey(id, data);
+
   await recordActivity({
     action: "SURVEY_SAVED",
-    message: `Survey ${survey.surveyCode} saved by ${actor.username}`,
+    message:
+      changes.length > 0
+        ? `Survey ${survey.surveyCode} saved by ${actor.username}: ${changes.map((change) => change.label).join(", ")}`
+        : `Survey ${survey.surveyCode} saved by ${actor.username} with no field changes`,
     userId: actor.userId,
     surveyId: id,
+    // Prisma's JSON input type does not accept a typed interface array directly.
+    metadata: {
+      changedFields: changes.map((change) => change.field),
+      changes,
+    } as unknown as Prisma.InputJsonValue,
   });
-  const updated = await updateSurvey(id, data);
 
   const feasibility = await computeFeasibility(
     updated.service.newNetwork
@@ -725,10 +863,12 @@ async function submitSurveyInTransaction(id: string, input: SubmitSurveyInput, a
 
   assertCanEdit(actor, survey);
 
-  if (input.gps.accuracy > env.GPS_MAX_ACCURACY_METERS) {
+  const settings = await getSystemSettings();
+
+  if (input.gps.accuracy > settings.gpsMaxAccuracyMeters) {
     throw ApiError.unprocessable(
-      `GPS accuracy is ${Math.round(input.gps.accuracy)}m, which is weaker than the required ${env.GPS_MAX_ACCURACY_METERS}m. Move to an open area and capture the location again.`,
-      { code: "GPS_ACCURACY_TOO_LOW", details: { maxAccuracyMeters: env.GPS_MAX_ACCURACY_METERS } },
+      `GPS accuracy is ${Math.round(input.gps.accuracy)}m, which is weaker than the required ${settings.gpsMaxAccuracyMeters}m. Move to an open area and capture the location again.`,
+      { code: "GPS_ACCURACY_TOO_LOW", details: { maxAccuracyMeters: settings.gpsMaxAccuracyMeters } },
     );
   }
 
@@ -805,7 +945,7 @@ async function submitSurveyInTransaction(id: string, input: SubmitSurveyInput, a
     );
 
     distanceFromServiceMeters = roundMeters(distance);
-    isWithinServiceArea = distance <= env.GPS_SERVICE_RADIUS_METERS;
+    isWithinServiceArea = distance <= settings.gpsServiceRadiusMeters;
   }
 
   await upsertGpsRecord({

@@ -192,6 +192,22 @@ Submitting is deliberately strict, and every rule is enforced server side:
 - The feasibility engine from AGENTS.md #10 re-runs on submit; the stored `feasibilityStatus` and
   reason codes are the backend's answer, not the client's.
 
+### Offline synchronisation (technician only)
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/sync/pull` | Everything the signed-in technician needs to keep working without a connection: their assigned surveys, the matching form data and the network options |
+| `POST` | `/sync/push` | Apply one locally recorded `SAVE` or `SUBMIT` mutation |
+
+Field work survives a lost connection. `GET /sync/pull` returns one snapshot (assigned surveys,
+their form data, network options) that the client stores in IndexedDB, and `surveys.version` is the
+concurrency token carried back on every write. A push whose `baseVersion` no longer matches returns
+`409 SYNC_CONFLICT` with the current version, so the technician is told the survey moved on instead
+of silently overwriting someone else's edit. `mutationId` makes retries idempotent: the first
+successful run stores its response in `sync_receipts` and a retry with the same payload replays that
+response rather than writing twice, while a retry that reuses an id with different data is refused as
+`SYNC_MUTATION_REUSED`. Only technicians can sync, and only for surveys assigned to them.
+
 ### Technicians
 
 | Method | Endpoint | Access | Purpose |
@@ -230,6 +246,25 @@ Report keys: `survey-summary`, `port-availability`, `box-utilization`, `line-cap
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
 | `GET` | `/activity-logs?userId&surveyId&action&search&from&to&page&pageSize` | Audit trail, e.g. "Technician 014 submitted survey" |
+
+### System configuration (administrator only)
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/settings` | Effective values, the overrides an administrator saved, and the field metadata the admin form renders from |
+| `PATCH` | `/settings` | Update one or more settings; only the keys present in the body change |
+
+`server/src/config/settings.ts` declares every setting once - key, label, bounds, unit and default -
+and both the API and the admin screen read that table, so a new setting reaches the form without a
+front-end change. Defaults come from the environment (`GPS_MAX_ACCURACY_METERS`,
+`GPS_SERVICE_RADIUS_METERS`); the database only holds what an administrator actually changed, so an
+out-of-range row, or one written by a newer build, is ignored in favour of the deployment default
+instead of breaking the field app. Reads are cached in memory for 30 seconds and the cache is
+refreshed on write. Every change is written to the activity log as `SETTINGS_UPDATED`.
+
+The technician-facing subset travels with the survey form data as `policy`, so the form enforces
+exactly the thresholds the server will apply, and a cached offline snapshot keeps working without a
+second request.
 
 Errors use a single envelope so the client can render them uniformly:
 
@@ -294,6 +329,8 @@ available; `LINE-05` runs `MSAN-03 -> BOX-15 -> BOX-18 -> BOX-22` with 18 of 48 
 | `/reports` | supervisor, admin | #17 reports with charts, tables and CSV export. |
 | `/admin/users` | admin | Account creation, roles and password resets. |
 | `/admin/network` | admin | #2 administrator master data: service areas, boxes with inline port management, lines with an ordered route editor, and services with old/new network pickers. |
+| `/admin/settings` | admin | #2 runtime configuration: GPS thresholds and the activity-log window. |
+| `/admin/activity` | admin | #20 system-wide audit trail, with an action filter and free-text search. |
 
 ### How it is put together
 
@@ -316,6 +353,20 @@ available; `LINE-05` runs `MSAN-03 -> BOX-15 -> BOX-18 -> BOX-22` with 18 of 48 
   them as Tailwind utilities. Dark mode is class based (`.dark` on `<html>`) and is applied before
   first paint by an inline script in the root layout.
 - Layout is mobile first, because technicians use phones in the field.
+- `client/public/sw.js` is a hand-written app-shell service worker, registered only by a production
+  build (`client/components/app/service-worker-registrar.tsx`). It precaches `/offline.html`, serves
+  `/_next/static/*` cache-first and answers navigations network-first, falling back to a previously
+  visited page and then to the offline page. It deliberately ignores the API: survey data, the
+  offline queue and conflict handling already live in IndexedDB under the app's control, and a second
+  cached copy of an API response would be a second, silently stale source of truth. In development
+  the registrar instead unregisters any worker and clears its caches, because the dev server rewrites
+  chunks on every edit.
+- `client/lib/offline/` is the field app's offline layer: `storage.ts` holds the IndexedDB snapshot
+  and the queue of locally recorded mutations, `sync-manager.ts` owns the online state, the retry and
+  the conflict, and `sync-provider.tsx` exposes all of it through `useSync()`. Nothing queued is
+  dropped silently - a failed write surfaces as a storage error instead - and
+  `client/components/app/sync-status-indicator.tsx` is the one place that turns the state into the
+  indicators the field app has to make obvious: offline, pending, syncing, synced and failed.
 
 ### Survey form behaviour
 
@@ -332,8 +383,9 @@ unmounts, and the draft is cleared as soon as the form matches the saved values 
 or submitted. Returning to a form that has one restores the box, port, line, capacity, field conditions
 and remark, says so at the top, and offers **Discard them** to start again from the saved values. The
 key is scoped to the signed-in technician, and GPS is never stored - a position captured minutes ago
-must not be resubmitted as a fresh measurement. This is not offline support (#18/#19): nothing is
-queued, retried or synced, and no server data is cached.
+must not be resubmitted as a fresh measurement. This local draft is not the offline
+queue (#18/#19): the draft rescues a reloaded tab, while the queue is what keeps a saved or
+submitted survey until the server has accepted it.
 
 ## Status
 
@@ -380,7 +432,7 @@ Two deliberate deviations from AGENTS.md, both confirmed with the project owner:
 
 - **Offline operation (#18/#19) is out of scope.** Surveys are submitted online. The form keeps a
   local draft of what the technician typed so a reload, a navigation or an expired session does not
-  discard it, but there is no queue, retry or conflict handling.
+  discard it, but there is no queue, retry or conflict handling. *Reversed later: see Task 8.*
 - **Surveys are raised by a supervisor or administrator, not by the technician.** Technicians work
   the queue that is assigned to them.
 
@@ -420,6 +472,45 @@ load, so **Save progress** unmounted the form and its "Saved." confirmation was 
 throwing away the GPS fix the technician had just captured. The boundary now keeps the current view
 mounted while data is refreshed and only takes over the page for the very first load.
 
-Next: nothing in the AGENTS.md scope is outstanding. The offline sync APIs (#18/#19) stay out of
-scope by decision, so the remaining work is hardening rather than features - a per-device session
-table if "log out everywhere" proves too blunt for technicians who carry more than one device.
+**Task 8 - offline field operation: complete.** #18/#19 are implemented rather than deferred, which
+supersedes the "out of scope" note in Task 4 above. Migration `20260917000000_offline_sync` adds
+`surveys.version` and a `sync_receipts` table; `GET /sync/pull` returns the technician's snapshot and
+`POST /sync/push` applies one queued `SAVE` or `SUBMIT` with idempotent retries and a version-checked
+conflict response. The client keeps the snapshot, the queue and the conflicts in IndexedDB, and one
+status indicator reports all of it.
+
+**Task 9 - error boundaries, richer logging, system configuration, app-shell worker: complete.**
+
+- **Route boundaries.** `client/app/error.tsx`, `client/app/(app)/error.tsx`,
+  `client/app/global-error.tsx` and `client/app/not-found.tsx` share
+  `client/components/app/route-error.tsx`. The signed-in boundary renders inside the shell, so a
+  failing screen keeps the navigation and the sync indicator and a technician can still reach their
+  other surveys.
+- **Submit confirmation.** Submitting closes the survey for editing, so the form asks first.
+  Validation that would block the submit still runs before the dialog - there is no point confirming
+  an action that cannot proceed - and the dialog repeats the target box, port and line, the
+  feasibility verdict and the GPS accuracy being submitted.
+- **Richer activity logging.** `SURVEY_OPENED` is recorded when a technician opens a survey to work
+  on it, deduplicated inside the configured window so a reload is not a new visit, and
+  `SURVEY_SAVED` names the fields that actually changed instead of only reporting that a save
+  happened.
+- **System configuration.** `/admin/settings` over the new `/settings` endpoints lets an
+  administrator change the GPS thresholds and the repeat-open window without a redeploy. The survey
+  form reads its GPS limit from the server response instead of hardcoding it.
+- **Activity log screen.** `/admin/activity` surfaces the audit trail the backend had been recording
+  all along, with a grouped action filter, free-text search and pagination. `client/lib/activity.ts`
+  is the single place that decides how each action is labelled, coloured and grouped, so the survey
+  timeline and the audit trail cannot drift apart.
+- **App-shell service worker.** `client/public/sw.js` and an offline fallback page, described under
+  Frontend above.
+
+Verified against the running app: the settings API including its range and empty-body rejections, the
+admin settings screen in a headless browser (load, out-of-range rejection, reset to default, save
+round trip, "last changed by"), the activity log with its action filter, and the service worker in a
+production build - shell and page caches populated, a cached route served with `transferSize: 0`
+while the server was stopped, and an uncached route falling back to `/offline.html`.
+
+Next: nothing in the AGENTS.md scope is outstanding. The remaining work is hardening rather than
+features - a per-device session table if "log out everywhere" proves too blunt for technicians who
+carry more than one device, and a background sync registration once the field app is installed as a
+standalone app instead of a browser tab.

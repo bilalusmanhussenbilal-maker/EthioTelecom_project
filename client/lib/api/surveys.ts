@@ -3,6 +3,7 @@ import type {
   ActivityEntry,
   BoxStatus,
   ChangeType,
+  FeasibilityPreview,
   LineStatus,
   Paginated,
   PortStatus,
@@ -57,6 +58,13 @@ export interface SubmitPayload extends FieldDataPayload {
   };
 }
 
+export interface FeasibilityCheckPayload {
+  newBoxId?: string | null;
+  newPortId?: string | null;
+  newLineId?: string | null;
+  requiredCapacity?: number | null;
+}
+
 export type ReviewDecision = "APPROVE" | "REJECT" | "RETURN";
 
 export const surveysApi = {
@@ -68,6 +76,12 @@ export const surveysApi = {
   get: (id: string) => api.get<{ survey: SurveyDetail }>(`/surveys/${id}`),
 
   getFormData: (id: string) => api.get<SurveyFormData>(`/surveys/${id}/form-data`),
+
+  /** Live feasibility for a target the technician is still choosing. Writes nothing. */
+  checkFeasibility: (payload: FeasibilityCheckPayload, options?: { signal?: AbortSignal }) =>
+    api.post<{ feasibility: FeasibilityPreview | null }>("/surveys/feasibility-check", payload, {
+      signal: options?.signal,
+    }),
 
   getTimeline: (id: string) => api.get<{ activity: ActivityEntry[] }>(`/surveys/${id}/timeline`),
 

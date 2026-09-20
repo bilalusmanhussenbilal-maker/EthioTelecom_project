@@ -8,6 +8,7 @@ import { LogOut, Network } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { SyncStatusIndicator } from "@/components/app/sync-status-indicator";
 import { useAuth } from "@/lib/auth/auth-provider";
 import { USER_ROLE_LABELS } from "@/lib/domain";
 import { navItemsForRole } from "@/lib/navigation";
@@ -88,6 +89,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </div>
               </div>
             ) : null}
+            <SyncStatusIndicator />
             <Button
               variant="ghost"
               size="icon"

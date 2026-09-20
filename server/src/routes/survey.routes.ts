@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   getSurveyFormDataHandler,
+  postFeasibilityCheckHandler,
   getSurveyHandler,
   getSurveySummaryHandler,
   getSurveyTimelineHandler,
@@ -21,6 +22,10 @@ surveyRouter.get("/", listSurveysHandler);
 surveyRouter.post("/", requireRole("SUPERVISOR", "ADMIN"), postSurveyHandler);
 
 surveyRouter.get("/summary", getSurveySummaryHandler);
+
+// Declared before "/:id" routes so the literal path is not swallowed by the id parameter.
+surveyRouter.post("/feasibility-check", postFeasibilityCheckHandler);
+
 surveyRouter.get("/:id", getSurveyHandler);
 surveyRouter.get("/:id/form-data", getSurveyFormDataHandler);
 surveyRouter.get("/:id/timeline", getSurveyTimelineHandler);

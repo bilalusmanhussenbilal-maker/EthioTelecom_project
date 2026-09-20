@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import { AuthProvider } from "@/lib/auth/auth-provider";
+import { SyncProvider } from "@/lib/offline/sync-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
@@ -34,7 +35,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       </head>
       <body className="min-h-dvh bg-background font-sans text-foreground antialiased">
         <ThemeProvider>
-          <AuthProvider>{children}</AuthProvider>
+          <AuthProvider>
+            <SyncProvider>{children}</SyncProvider>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

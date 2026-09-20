@@ -59,6 +59,13 @@ export function isSurveyStatus(value: string): value is SurveyStatus {
   return (SURVEY_STATUSES as readonly string[]).includes(value);
 }
 
+/**
+ * Saving field data puts these back into IN_PROGRESS. REJECTED belongs here because a rejection
+ * is reworkable: the technician corrects the data and submits again, exactly like RETURNED.
+ * COMPLETED is the only status closed to further field edits, which `assertCanEdit` enforces.
+ */
+const REWORK_STATUSES: readonly SurveyStatus[] = ["NEW", "RETURNED", "REJECTED"];
+
 export function reviewStateOf(survey: {
   status: SurveyStatus;
   submittedAt: Date | null;
@@ -265,6 +272,39 @@ export async function computeFeasibility(newNetwork: NewNetworkRef | null): Prom
     })),
     availableCapacity: result.availableCapacity,
   };
+}
+
+export interface FeasibilityCheckInput {
+  newBoxId?: string | null;
+  newPortId?: string | null;
+  newLineId?: string | null;
+  requiredCapacity?: number | null;
+}
+
+/**
+ * Feasibility for an arbitrary target, with no survey attached. The form calls this while the
+ * technician is still choosing a box, port and line, so they find out on the spot instead of at
+ * submit time. It reuses `computeFeasibility`, which keeps this answer and the authoritative one
+ * applied on save and submit in agreement.
+ *
+ * With nothing selected there is no target to judge, so the result is `null` rather than a list of
+ * "does not exist" complaints about empty fields.
+ */
+export async function checkFeasibilityForTarget(
+  input: FeasibilityCheckInput,
+): Promise<FeasibilityPreview | null> {
+  const hasTarget = Boolean(input.newBoxId ?? input.newPortId ?? input.newLineId);
+
+  if (!hasTarget) {
+    return null;
+  }
+
+  return computeFeasibility({
+    boxId: input.newBoxId ?? null,
+    portId: input.newPortId ?? null,
+    lineId: input.newLineId ?? null,
+    requiredCapacity: input.requiredCapacity ?? 0,
+  });
 }
 
 
@@ -614,7 +654,7 @@ async function saveFieldDataInTransaction(id: string, input: FieldDataInput, act
     ...(input.availableCapacity === undefined ? {} : { availableCapacity: input.availableCapacity }),
     ...(input.requiredCapacity === undefined ? {} : { requiredCapacity: input.requiredCapacity }),
     ...(input.technicianRemark === undefined ? {} : { technicianRemark: input.technicianRemark }),
-    ...(survey.status === "NEW" || survey.status === "RETURNED" ? { status: "IN_PROGRESS" } : {}),
+    ...(REWORK_STATUSES.includes(survey.status) ? { status: "IN_PROGRESS" } : {}),
   };
 
   await recordActivity({
@@ -781,6 +821,12 @@ async function submitSurveyInTransaction(id: string, input: SubmitSurveyInput, a
   const updated = await updateSurvey(id, {
     status: "COMPLETED",
     submittedAt,
+    // A resubmission is a fresh review cycle. Carrying the previous decision over would show the
+    // supervisor a remark from the rejection the technician has just acted on.
+    reviewRemark: null,
+    reviewedAt: null,
+    reviewedById: null,
+    completedAt: null,
     boxStatus: boxStatus ?? null,
     portStatus: portStatus ?? null,
     lineStatus: input.lineStatus ?? refreshed.lineStatus ?? null,

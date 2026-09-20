@@ -29,14 +29,21 @@ import { clearSurveyDraft, loadSurveyDraft, saveSurveyDraft } from "@/lib/survey
 import type { SurveyDraftInput } from "@/lib/survey-draft";
 import type {
   BoxStatus,
+  FeasibilityPreview,
   LineStatus,
   PortStatus,
   SurveyFormData,
 } from "@/lib/api/types";
+import { useSync } from "@/lib/offline/sync-provider";
+import type { QueuedMutation } from "@/lib/offline/storage";
+import { SyncConflictBanner } from "@/components/app/sync-conflict-banner";
 
 const BOX_STATUS_OPTIONS: BoxStatus[] = ["ACTIVE", "FAULTY", "INACTIVE"];
 const PORT_STATUS_OPTIONS: PortStatus[] = ["AVAILABLE", "OCCUPIED", "FAULTY"];
 const LINE_STATUS_OPTIONS: LineStatus[] = ["ACTIVE", "FAULTY", "INACTIVE"];
+
+/** "synced" means the verdict on screen was computed for the selection currently in the form. */
+type FeasibilityCheckState = "synced" | "checking" | "offline" | "failed";
 
 interface CapturedLocation {
   latitude: number;
@@ -103,7 +110,12 @@ function SurveyForm({ id, initial, options, onSaved }: SurveyFormProps) {
    */
   const draftOwner = user?.id ?? "";
 
-  const locked = initial.survey.status === "COMPLETED" || initial.survey.status === "REJECTED";
+  /**
+   * COMPLETED is the only status closed to field edits. RETURNED and REJECTED are both rework:
+   * the technician corrects the data and submits again.
+   */
+  const locked = initial.survey.status === "COMPLETED";
+  const needsRework = initial.survey.status === "RETURNED" || initial.survey.status === "REJECTED";
 
   /**
    * Put back anything the technician typed before. This component only mounts on the client, once
@@ -159,6 +171,12 @@ function SurveyForm({ id, initial, options, onSaved }: SurveyFormProps) {
   const [locating, setLocating] = useState(false);
   const [locationMessage, setLocationMessage] = useState<string | null>(null);
 
+  const { enqueue, state: syncState, keepLocalChanges, discardLocalChanges } = useSync();
+
+  /** Only surface a conflict on the survey it actually belongs to. */
+  const conflict = syncState.conflict?.surveyId === id ? syncState.conflict : null;
+  const [resolvingConflict, setResolvingConflict] = useState(false);
+
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
@@ -173,7 +191,98 @@ function SurveyForm({ id, initial, options, onSaved }: SurveyFormProps) {
     ? options.lines.filter((line) => line.path.includes(selectedBox.code))
     : [];
 
-  const feasibility = initial.feasibility;
+  /**
+   * Live feasibility. `initial.feasibility` is what the server computed for the target it loaded;
+   * as soon as the technician picks a different box, port, line or capacity that answer is stale,
+   * so we re-check against the server rather than leave a misleading verdict on screen.
+   */
+  const initialTargetKey = useMemo(
+    () =>
+      JSON.stringify([
+        initial.newNetwork?.box?.id ?? "",
+        initial.newNetwork?.port?.id ?? "",
+        initial.newNetwork?.line?.id ?? "",
+        String(initial.requiredCapacity ?? initial.fieldSurvey.requiredCapacity ?? 0),
+      ]),
+    [initial],
+  );
+  const targetKey = JSON.stringify([boxId, portId, lineId, requiredCapacity]);
+  const targetChanged = targetKey !== initialTargetKey;
+
+  // Results are stamped with the target they were computed for, so a response that arrives after
+  // the technician has moved on is simply ignored rather than shown as a current verdict.
+  const [liveResult, setLiveResult] = useState<{
+    key: string;
+    feasibility: FeasibilityPreview | null;
+  } | null>(null);
+  const [failedKey, setFailedKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Product decision: no local approximation offline. Save and submit re-check on the server.
+    if (locked || !targetChanged || !syncState.online) {
+      return;
+    }
+
+    const controller = new AbortController();
+
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const { feasibility: result } = await surveysApi.checkFeasibility(
+            {
+              newBoxId: boxId === "" ? null : boxId,
+              newPortId: portId === "" ? null : portId,
+              newLineId: lineId === "" ? null : lineId,
+              requiredCapacity: requiredCapacity === "" ? null : Number(requiredCapacity),
+            },
+            { signal: controller.signal },
+          );
+
+          setLiveResult({ key: targetKey, feasibility: result });
+        } catch {
+          // A newer keystroke aborted this request; that one owns the state now.
+          if (controller.signal.aborted) {
+            return;
+          }
+          setFailedKey(targetKey);
+        }
+      })();
+    }, 500);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [locked, targetChanged, syncState.online, targetKey, boxId, portId, lineId, requiredCapacity]);
+
+  const liveIsCurrent = liveResult?.key === targetKey;
+
+  const checkState: FeasibilityCheckState =
+    locked || !targetChanged
+      ? "synced"
+      : !syncState.online
+        ? "offline"
+        : liveIsCurrent
+          ? "synced"
+          : failedKey === targetKey
+            ? "failed"
+            : "checking";
+
+  /** Never show a verdict we are not currently sure of. */
+  const feasibility = !targetChanged
+    ? initial.feasibility
+    : liveIsCurrent
+      ? liveResult.feasibility
+      : null;
+
+  const feasibilityHint =
+    checkState === "checking"
+      ? "Checking feasibility…"
+      : checkState === "offline"
+        ? "Feasibility will be checked when you reconnect."
+        : checkState === "failed"
+          ? "Could not check feasibility right now. It is verified again when you save."
+          : null;
 
   const serverSnapshot = useMemo(
     () =>
@@ -299,19 +408,88 @@ function SurveyForm({ id, initial, options, onSaved }: SurveyFormProps) {
     };
   }
 
+  /**
+   * A failed write must never vanish. When the request could not leave the device we hand the
+   * edit to the sync queue instead, and only clear the local draft once that write is durable.
+   */
+  async function queueOffline(mutation: QueuedMutation): Promise<boolean> {
+    try {
+      await enqueue(mutation);
+      clearSurveyDraft(draftOwner, id);
+      setDraftRestored(false);
+      return true;
+    } catch (cause) {
+      const reason = cause instanceof Error ? cause.message : "the reason is unknown";
+      setError(
+        new ApiError(0, {
+          code: "OFFLINE_STORAGE_FAILED",
+          message: `You are offline and this device could not store the survey: ${reason}. Keep this page open and try again once you have a connection.`,
+        }),
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Both outcomes reload the form afterwards: "keep" so the version on screen matches what the
+   * server now holds, "rebase" because the server's values are the whole point of that choice.
+   */
+  async function resolveConflict(choice: "keep" | "rebase") {
+    setResolvingConflict(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      if (choice === "keep") {
+        await keepLocalChanges();
+        // Deliberately does not claim the send succeeded: if the flush that follows fails, or we
+        // are offline, the edit simply stays queued.
+        setNotice("Your changes were kept. They will overwrite the server copy on the next sync.");
+      } else {
+        await discardLocalChanges();
+        setNotice("Your queued changes were discarded. This form now shows the server's version.");
+      }
+      onSaved();
+    } catch (cause) {
+      setError(toApiError(cause, "Could not resolve the sync conflict"));
+    } finally {
+      setResolvingConflict(false);
+    }
+  }
+
   async function handleSave() {
     setSaving(true);
     setError(null);
     setNotice(null);
 
+    const payload = fieldPayload();
+
     try {
-      await surveysApi.saveFieldData(id, fieldPayload());
+      await surveysApi.saveFieldData(id, payload);
       clearSurveyDraft(draftOwner, id);
       setDraftRestored(false);
       setNotice("Saved. Feasibility has been re-checked against the latest values.");
       onSaved();
     } catch (cause) {
-      setError(toApiError(cause, "Could not save the survey"));
+      const failure = toApiError(cause, "Could not save the survey");
+
+      if (!failure.isNetworkError) {
+        setError(failure);
+        return;
+      }
+
+      const queued = await queueOffline({
+        mutationId: crypto.randomUUID(),
+        surveyId: id,
+        baseVersion: initial.survey.version,
+        action: "SAVE",
+        data: payload,
+        queuedAt: new Date().toISOString(),
+      });
+
+      if (queued) {
+        setNotice("You are offline. This save is stored on your device and will sync automatically.");
+      }
     } finally {
       setSaving(false);
     }
@@ -334,12 +512,35 @@ function SurveyForm({ id, initial, options, onSaved }: SurveyFormProps) {
     setError(null);
     setNotice(null);
 
+    const payload = { ...fieldPayload(), gps: location };
+
     try {
-      await surveysApi.submit(id, { ...fieldPayload(), gps: location });
+      await surveysApi.submit(id, payload);
       clearSurveyDraft(draftOwner, id);
       router.push(`/surveys/${id}`);
     } catch (cause) {
-      setError(toApiError(cause, "Could not submit the survey"));
+      const failure = toApiError(cause, "Could not submit the survey");
+
+      if (!failure.isNetworkError) {
+        setError(failure);
+        return;
+      }
+
+      const queued = await queueOffline({
+        mutationId: crypto.randomUUID(),
+        surveyId: id,
+        baseVersion: initial.survey.version,
+        action: "SUBMIT",
+        data: payload,
+        queuedAt: new Date().toISOString(),
+      });
+
+      if (queued) {
+        // Staying put is honest: the server has not accepted the submission yet.
+        setNotice(
+          "You are offline. This submission is stored on your device and will be sent automatically once you are back online.",
+        );
+      }
     } finally {
       setSubmitting(false);
     }
@@ -354,16 +555,49 @@ function SurveyForm({ id, initial, options, onSaved }: SurveyFormProps) {
         description="Confirm what you see in the field. Everything else is already filled in from the database."
       />
 
+      {conflict ? (
+        <SyncConflictBanner
+          surveyCode={conflict.surveyCode ?? initial.survey.surveyCode}
+          message={conflict.message}
+          baseVersion={conflict.baseVersion}
+          currentVersion={conflict.currentVersion}
+          pendingForSurvey={conflict.pendingForSurvey}
+          online={syncState.online}
+          busy={resolvingConflict}
+          onKeep={() => {
+            void resolveConflict("keep");
+          }}
+          onRebase={() => {
+            void resolveConflict("rebase");
+          }}
+        />
+      ) : null}
+
       {locked ? (
         <Alert tone="info" title="This survey is closed">
           <p>
-            It is {initial.survey.reviewState === "APPROVED" ? "approved" : initial.survey.reviewState.toLowerCase()} and
-            can no longer be edited.{" "}
+            It has been submitted and is{" "}
+            {initial.survey.reviewState === "APPROVED" ? "approved" : "awaiting supervisor review"}, so
+            it can no longer be edited.{" "}
             <Link href={`/surveys/${id}`} className="underline">
               View the result
             </Link>
             .
           </p>
+        </Alert>
+      ) : null}
+
+      {needsRework ? (
+        <Alert
+          tone="warning"
+          title={
+            initial.survey.status === "REJECTED"
+              ? "This survey was rejected and needs correcting"
+              : "This survey was returned for correction"
+          }
+        >
+          <p>{initial.survey.reviewRemark ?? "The supervisor did not leave a remark."}</p>
+          <p>Correct the field data below, then submit it again for review.</p>
         </Alert>
       ) : null}
 
@@ -500,8 +734,19 @@ function SurveyForm({ id, initial, options, onSaved }: SurveyFormProps) {
                 {feasibility.availableCapacity} capacity available
               </span>
             ) : null}
+            {feasibilityHint ? (
+              <span
+                aria-live="polite"
+                className="inline-flex items-center gap-1.5 text-sm text-muted-foreground"
+              >
+                {checkState === "checking" ? (
+                  <Loader2 aria-hidden className="size-3.5 animate-spin" />
+                ) : null}
+                {feasibilityHint}
+              </span>
+            ) : null}
             {!locked ? (
-              <Button type="button" variant="ghost" size="sm" onClick={handleSave} disabled={saving}>
+              <Button type="button" variant="ghost" size="sm" onClick={handleSave} disabled={saving || resolvingConflict}>
                 {saving ? <Loader2 aria-hidden className="animate-spin" /> : <Save aria-hidden />}
                 Re-check and save
               </Button>
@@ -658,11 +903,11 @@ function SurveyForm({ id, initial, options, onSaved }: SurveyFormProps) {
       <div className="sticky bottom-20 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-background/95 p-3 backdrop-blur sm:bottom-4">
         {!locked ? (
           <>
-            <Button type="submit" disabled={submitting || saving || !location}>
+            <Button type="submit" disabled={submitting || saving || resolvingConflict || !location}>
               {submitting ? <Loader2 aria-hidden className="animate-spin" /> : <Send aria-hidden />}
               {submitting ? "Submitting" : "Submit survey"}
             </Button>
-            <Button type="button" variant="outline" onClick={handleSave} disabled={saving || submitting}>
+            <Button type="button" variant="outline" onClick={handleSave} disabled={saving || submitting || resolvingConflict}>
               {saving ? <Loader2 aria-hidden className="animate-spin" /> : <Save aria-hidden />}
               Save progress
             </Button>

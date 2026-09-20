@@ -63,8 +63,9 @@ export function SurveyDetailView() {
 
       <AsyncBoundary state={detail} loadingLabel="Loading the survey">
         {(survey) => {
-          const canEditFieldData =
-            isTechnician && (survey.status === "NEW" || survey.status === "IN_PROGRESS" || survey.status === "RETURNED");
+          // COMPLETED is the only status a technician cannot work on; RETURNED and REJECTED are
+          // both rework, so they keep a route back into the form.
+          const canEditFieldData = isTechnician && survey.status !== "COMPLETED";
           const canReview = isSupervisor && survey.status === "COMPLETED";
           const reasons = survey.feasibilityReasons ?? survey.feasibility?.reasons ?? [];
 
@@ -78,7 +79,11 @@ export function SurveyDetailView() {
                     {canEditFieldData ? (
                       <Link href={`/surveys/${survey.id}/survey`} className={buttonVariants({ size: "sm" })}>
                         <ClipboardEdit aria-hidden className="size-4" />
-                        {survey.status === "NEW" ? "Start survey" : "Continue survey"}
+                        {survey.status === "NEW"
+                          ? "Start survey"
+                          : survey.status === "RETURNED" || survey.status === "REJECTED"
+                            ? "Correct and resubmit"
+                            : "Continue survey"}
                       </Link>
                     ) : null}
                     {isSupervisor ? (

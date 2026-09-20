@@ -25,6 +25,14 @@ export const submitSchema = fieldDataSchema.extend({
   }),
 });
 
+/**
+ * Standalone feasibility probe. Same target fields the survey form edits, so the live check and
+ * the authoritative check on save/submit are asking the same question.
+ */
+export const feasibilityCheckSchema = z.strictObject({ ...networkTargetSchema });
+
+export type FeasibilityCheckInput = z.output<typeof feasibilityCheckSchema>;
+
 const mutationFields = {
   mutationId: z.uuid(),
   surveyId: z.string().min(1),

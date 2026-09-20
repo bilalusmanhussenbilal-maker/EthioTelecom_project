@@ -4,6 +4,7 @@ import { getAuthContext } from "../middleware/auth.js";
 import { getStatusCounts } from "../services/technician.service.js";
 import {
   assignSurvey,
+  checkFeasibilityForTarget,
   createSurveyForActor,
   getSurveyDetail,
   getSurveyFormData,
@@ -14,7 +15,7 @@ import {
   submitSurvey,
 } from "../services/survey.service.js";
 import { ApiError } from "../utils/api-error.js";
-import { fieldDataSchema, submitSchema } from "../utils/survey-validation.js";
+import { feasibilityCheckSchema, fieldDataSchema, submitSchema } from "../utils/survey-validation.js";
 import { parseBody, parseParams, parseQuery } from "../utils/validation.js";
 
 const idParams = z.object({ id: z.string().min(1) });
@@ -109,6 +110,16 @@ export const getSurveyTimelineHandler: RequestHandler = async (req, res) => {
   const activity = await getSurveyTimeline(id, getAuthContext(req));
 
   res.status(200).json({ activity });
+};
+
+/**
+ * Live feasibility probe for the survey form. Read-only: it judges a target the technician is
+ * still choosing and writes nothing, so it stays outside the survey's own permission checks.
+ */
+export const postFeasibilityCheckHandler: RequestHandler = async (req, res) => {
+  const body = parseBody(feasibilityCheckSchema, req);
+
+  res.status(200).json({ feasibility: await checkFeasibilityForTarget(body) });
 };
 
 export const postSurveyHandler: RequestHandler = async (req, res) => {

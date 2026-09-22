@@ -15,6 +15,16 @@ export function usesCrossSiteAuth(): boolean {
     return env.COOKIE_CROSS_SITE;
   }
 
+  // Every deployment is treated as split (Next.js on Vercel, API on Render): a cross-site
+  // request only carries the session cookie when it is SameSite=None; Secure, otherwise the
+  // browser drops it and every call looks unauthenticated.
+  if (!isDevelopment) {
+    return true;
+  }
+
+  // Local development is same-site over http, where browsers reject a Secure cookie, so the lax
+  // default is the right one. Only a real domain in CORS_ORIGIN (a hosted frontend calling a
+  // local API) makes the browser treat those requests as cross-site.
   return corsOrigins.some((origin) => {
     try {
       const hostname = new URL(origin).hostname;

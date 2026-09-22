@@ -8,7 +8,15 @@ const envSchema = z.object({
     .string()
     .regex(/^\/[a-z0-9\-/]*$/, "must start with '/' and use only lowercase letters, digits, '-' or '/'")
     .default("/api/v1"),
-  CORS_ORIGIN: z.string().min(1).default("http://localhost:3000"),
+  CORS_ORIGIN: z
+    .string()
+    .min(1)
+    .default("http://localhost:3000")
+    .describe("Comma-separated browser origins allowed to call the API with credentials"),
+  COOKIE_CROSS_SITE: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((value) => (value === undefined ? undefined : value === "true")),
   LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),

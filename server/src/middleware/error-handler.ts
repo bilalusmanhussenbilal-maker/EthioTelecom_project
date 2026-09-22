@@ -64,7 +64,12 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, next) => {
     body.error.details = apiError.details;
   }
 
-  if (!isProduction && error instanceof Error && error.stack) {
+  if (
+    !isProduction &&
+    error instanceof Error &&
+    !(error instanceof ApiError) &&
+    error.stack
+  ) {
     body.error.stack = error.stack;
   }
 

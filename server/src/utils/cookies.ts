@@ -1,11 +1,14 @@
 import type { CookieOptions, Response } from "express";
-import { env, isProduction } from "../config/env.js";
+import { usesCrossSiteAuth } from "../config/cors.js";
+import { env } from "../config/env.js";
 
 function baseOptions(): CookieOptions {
+  const crossSite = usesCrossSiteAuth();
+
   return {
     httpOnly: true,
-    secure: isProduction,
-    sameSite: isProduction ? "none" : "lax",
+    secure: crossSite,
+    sameSite: crossSite ? "none" : "lax",
     path: "/",
   };
 }

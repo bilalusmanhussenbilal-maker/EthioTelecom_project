@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   WifiOff,
 } from "lucide-react";
+import { ScrollHeader } from "@/components/landing/scroll-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -102,7 +103,7 @@ function SectionHeading({
 export default function Home() {
   return (
     <div className="landing-shell dark flex min-h-dvh flex-col bg-background text-foreground">
-      <header className="landing-nav sticky top-0 z-50 bg-background/50 backdrop-blur-md">
+      <ScrollHeader>
         <div className={cn(CONTAINER, "flex items-center gap-3 py-3")}>
           <Link
             href="/"
@@ -124,7 +125,7 @@ export default function Home() {
             </Link>
           </div>
         </div>
-      </header>
+      </ScrollHeader>
 
       <main className="flex-1">
         <section className="landing-hero relative overflow-hidden text-foreground">

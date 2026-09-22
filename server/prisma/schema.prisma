@@ -1,6 +1,8 @@
 generator client {
   provider      = "prisma-client-js"
-  binaryTargets = ["debian-openssl-3.0.x", "linux-musl-openssl-3.0.x"]
+  // "native" generates the query engine for whatever platform runs `prisma generate`
+  // (Windows/macOS locally, Linux on Render). Pinning Linux-only targets broke local dev.
+  binaryTargets = ["native"]
 }
 
 datasource db {

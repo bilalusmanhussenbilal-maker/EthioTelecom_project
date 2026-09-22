@@ -12,13 +12,16 @@ export function createApp(): Express {
   const app = express();
 
   app.disable("x-powered-by");
+
   app.use(helmet());
+
   app.use(
     cors({
-      origin: env.CORS_ORIGIN.split(",").map((origin) => origin.trim()),
+      origin: true,
       credentials: true,
     }),
   );
+
   app.use(cookieParser());
   app.use(express.json({ limit: "1mb" }));
   app.use(requestLogger);

@@ -5,14 +5,29 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { LogOut, Network } from "lucide-react";
+import {
+  AnimatedSidebar,
+  AnimatedSidebarContent,
+  AnimatedSidebarFooter,
+  AnimatedSidebarGroup,
+  AnimatedSidebarGroupContent,
+  AnimatedSidebarGroupLabel,
+  AnimatedSidebarHeader,
+  AnimatedSidebarInset,
+  AnimatedSidebarMenu,
+  AnimatedSidebarMenuButton,
+  AnimatedSidebarMenuItem,
+  AnimatedSidebarProvider,
+  AnimatedSidebarRail,
+  AnimatedSidebarTrigger,
+} from "@/components/motion/animated-sidebar";
+import { SyncStatusIndicator } from "@/components/app/sync-status-indicator";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { SyncStatusIndicator } from "@/components/app/sync-status-indicator";
 import { useAuth } from "@/lib/auth/auth-provider";
 import { USER_ROLE_LABELS } from "@/lib/domain";
-import { navItemsForRole } from "@/lib/navigation";
-import { cn } from "@/lib/utils";
+import { navSectionsForRole } from "@/lib/navigation";
 
 function isActivePath(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -25,7 +40,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [signingOut, setSigningOut] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
 
-  const items = user ? navItemsForRole(user.role) : [];
+  const sections = user ? navSectionsForRole(user.role) : [];
 
   async function handleSignOut() {
     setSigningOut(true);
@@ -40,98 +55,85 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col">
-      <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3">
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <span className="inline-flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+    <AnimatedSidebarProvider>
+      <AnimatedSidebar collapsible="icon">
+        <AnimatedSidebarHeader>
+          <Link href="/dashboard" className="flex items-center gap-2 overflow-hidden px-1 py-1">
+            <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <Network aria-hidden className="size-4" />
             </span>
-            <span className="hidden text-sm font-semibold leading-tight sm:inline">
+            <span className="truncate text-sm font-semibold leading-tight">
               Network Service Survey
             </span>
           </Link>
+        </AnimatedSidebarHeader>
 
-          <nav aria-label="Main" className="ml-2 hidden flex-1 items-center gap-1 sm:flex">
-            {items.map((item) => {
-              const active = isActivePath(pathname, item.href);
+        <AnimatedSidebarContent>
+          {sections.map((section) => (
+            <AnimatedSidebarGroup key={section.group}>
+              <AnimatedSidebarGroupLabel>{section.group}</AnimatedSidebarGroupLabel>
+              <AnimatedSidebarGroupContent>
+                <AnimatedSidebarMenu>
+                  {section.items.map((item) => (
+                    <AnimatedSidebarMenuItem key={item.href}>
+                      <AnimatedSidebarMenuButton
+                        href={item.href}
+                        isActive={isActivePath(pathname, item.href)}
+                        icon={<item.icon aria-hidden className="size-4" />}
+                      >
+                        {item.label}
+                      </AnimatedSidebarMenuButton>
+                    </AnimatedSidebarMenuItem>
+                  ))}
+                </AnimatedSidebarMenu>
+              </AnimatedSidebarGroupContent>
+            </AnimatedSidebarGroup>
+          ))}
+        </AnimatedSidebarContent>
 
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    active
-                      ? "bg-accent text-accent-foreground"
-                      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-                  )}
-                >
-                  <item.icon aria-hidden className="size-4" />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-
-          <div className="ml-auto flex items-center gap-1.5">
-            <ThemeToggle />
-            {user ? (
-              <div className="hidden items-center gap-2 rounded-lg border border-border px-2.5 py-1.5 sm:flex">
-                <div className="text-right leading-tight">
-                  <p className="text-xs font-medium">{user.fullName}</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    {USER_ROLE_LABELS[user.role]}
-                    {user.employeeCode ? ` - ${user.employeeCode}` : ""}
-                  </p>
-                </div>
+        <AnimatedSidebarFooter>
+          {user ? (
+            <div className="flex items-center gap-2 overflow-hidden rounded-lg px-1 py-1">
+              <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold uppercase">
+                {user.fullName.slice(0, 2)}
+              </span>
+              <div className="min-w-0 leading-tight">
+                <p className="truncate text-xs font-medium">{user.fullName}</p>
+                <p className="truncate text-[11px] text-muted-foreground">
+                  {USER_ROLE_LABELS[user.role]}
+                  {user.employeeCode ? ` - ${user.employeeCode}` : ""}
+                </p>
               </div>
-            ) : null}
-            <SyncStatusIndicator />
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Sign out"
-              onClick={() => setConfirmSignOut(true)}
-            >
-              <LogOut aria-hidden />
-            </Button>
+            </div>
+          ) : null}
+        </AnimatedSidebarFooter>
+
+        <AnimatedSidebarRail />
+      </AnimatedSidebar>
+
+      <AnimatedSidebarInset>
+        <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur">
+          <div className="flex w-full items-center gap-2 px-4 py-3">
+            {/* The only nav control on mobile: it opens the sidebar as a sheet. */}
+            <AnimatedSidebarTrigger />
+
+            <div className="ml-auto flex items-center gap-1.5">
+              <SyncStatusIndicator />
+              <ThemeToggle />
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Sign out"
+                onClick={() => setConfirmSignOut(true)}
+              >
+                <LogOut aria-hidden />
+              </Button>
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-24 pt-4 sm:pb-10 sm:pt-6">
-        {children}
-      </main>
-
-      <nav
-        aria-label="Main"
-        className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden"
-      >
-        <ul className="flex items-stretch overflow-x-auto">
-          {items.map((item) => {
-            const active = isActivePath(pathname, item.href);
-
-            return (
-              <li key={item.href} className="min-w-16 flex-1">
-                <Link
-                  href={item.href}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "flex flex-col items-center gap-1 px-2 py-2.5 text-[11px] font-medium",
-                    active ? "text-foreground" : "text-muted-foreground",
-                  )}
-                >
-                  <item.icon aria-hidden className={cn("size-5", active && "text-primary")} />
-                  {item.label}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-10 pt-4 sm:pt-6">{children}</main>
+      </AnimatedSidebarInset>
 
       <Dialog
         open={confirmSignOut}
@@ -149,6 +151,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           </>
         }
       />
-    </div>
+    </AnimatedSidebarProvider>
   );
 }

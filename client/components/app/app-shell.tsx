@@ -4,9 +4,10 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import type { ReactNode } from "react";
-import { LogOut, Network } from "lucide-react";
+import { LogOut, Menu, Network, PanelLeft, X } from "lucide-react";
 import {
   AnimatedSidebar,
+  AnimatedSidebarClose,
   AnimatedSidebarContent,
   AnimatedSidebarFooter,
   AnimatedSidebarGroup,
@@ -58,14 +59,31 @@ export function AppShell({ children }: { children: ReactNode }) {
     <AnimatedSidebarProvider>
       <AnimatedSidebar collapsible="icon">
         <AnimatedSidebarHeader>
-          <Link href="/dashboard" className="flex items-center gap-2 overflow-hidden px-1 py-1">
-            <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Network aria-hidden className="size-4" />
-            </span>
-            <span className="truncate text-sm font-semibold leading-tight">
-              Network Service Survey
-            </span>
-          </Link>
+          <div className="flex items-center gap-1">
+            <Link
+              href="/dashboard"
+              className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden px-1 py-1"
+            >
+              <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                <Network aria-hidden className="size-4" />
+              </span>
+              <span className="truncate text-sm font-semibold leading-tight">
+                Network Service Survey
+              </span>
+            </Link>
+            {/*
+              On a phone the sheet is the whole navigation. Tapping the scrim or pressing
+              Escape closes it, but neither is discoverable, so give it a close control. The
+              desktop rail hides this with CSS instead of branching on `isMobile`, which keeps
+              the server render and the first client render identical.
+            */}
+            <AnimatedSidebarClose
+              aria-label="Close navigation"
+              className="size-9 shrink-0 text-muted-foreground hover:bg-accent hover:text-accent-foreground md:hidden"
+            >
+              <X aria-hidden className="size-5" />
+            </AnimatedSidebarClose>
+          </div>
         </AnimatedSidebarHeader>
 
         <AnimatedSidebarContent>
@@ -114,8 +132,16 @@ export function AppShell({ children }: { children: ReactNode }) {
       <AnimatedSidebarInset>
         <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur">
           <div className="flex w-full items-center gap-2 px-4 py-3">
-            {/* The only nav control on mobile: it opens the sidebar as a sheet. */}
-            <AnimatedSidebarTrigger />
+            {/*
+              The only navigation control on a phone: it opens the sidebar as a sheet. On
+              desktop the same button collapses the panel to the icon rail, and it already
+              reserved this space in the row. The icon is chosen with CSS, not `isMobile`, so
+              the server render and the first client render agree.
+            */}
+            <AnimatedSidebarTrigger className="text-foreground hover:bg-accent hover:text-accent-foreground">
+              <Menu aria-hidden className="size-5 md:hidden" />
+              <PanelLeft aria-hidden className="hidden size-5 md:block" />
+            </AnimatedSidebarTrigger>
 
             <div className="ml-auto flex items-center gap-1.5">
               <SyncStatusIndicator />
